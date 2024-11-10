@@ -129,6 +129,23 @@ impl RjsonStore {
         let arr = match rp(&d, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
         value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
     }
+    #[php_method] pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval {
+        let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap();
+        let arr = match rp(&d, &collection) { Some(Value::Array(a)) => a, _ => return Zval::new() };
+        let vs: Vec<f64> = arr.iter().filter_map(|item| rn(item, &field)).filter_map(|v| v.as_f64()).collect();
+        if vs.is_empty() { return Zval::new(); }
+        let res = match operation.as_str() { "sum" => vs.iter().sum::<f64>(), "avg" => vs.iter().sum::<f64>() / vs.len() as f64, "count" => vs.len() as f64, _ => 0.0 };
+        value_to_zval(&json!(res))
+    }
+    #[php_method] pub fn validate(&self, path: String, schema: &Zval) -> Zval {
+        let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap(); let sv = zval_to_value(schema);
+        let t = rp(&d, &path).unwrap_or(&Value::Null);
+        let mut errs = Vec::new();
+        if let Some(st) = sv.get("type").and_then(|v| v.as_str()) {
+           if (st == "string" && !t.is_string()) || (st == "number" && !t.is_number()) { errs.push(json!({"error": "type mismatch"})); }
+        }
+        value_to_zval(&json!({"valid": errs.is_empty(), "errors": errs}))
+    }
 }
 
 #[php_module]
