@@ -117,34 +117,29 @@ fn sap(root: &mut Value, dp: &str, value: Value) {
 #[php_class(name = "Rjson\\Store")]
 pub struct RjsonStore { inner: Option<StoreInner> }
 
+struct IndexStore {
+    single: HashMap<String, HashMap<String, Vec<usize>>>,
+    built_at: u64,
+}
+
+impl StoreInner {
+    fn new(path: String) -> Self {
+        let p = PathBuf::from(&path);
+        if !p.exists() { let _ = fs::write(&p, "{}"); }
+        Self { path: p }
+    }
+    // ... existing read/write ...
+}
+
 #[php_impl]
 impl RjsonStore {
-    #[php_method] pub fn __construct(path: String) -> RjsonStore { RjsonStore { inner: Some(StoreInner::new(path)) } }
-    #[php_method] pub fn get(&self, path: String) -> Zval { let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap(); rp(&d, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new) }
-    #[php_method] pub fn set(&self, path: String, value: &Zval) -> bool { let i = self.inner.as_ref().unwrap(); let mut d = i.read().unwrap(); sap(&mut d, &path, zval_to_value(value)); i.write(&d).is_ok() }
-    #[php_method] pub fn has(&self, path: String) -> bool { let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap(); rp(&d, &path).is_some() }
-    #[php_method] pub fn find(&self, collection: String, conditions: &Zval) -> Zval {
-        let i = self.inner.as_ref().unwrap(); let cond = zval_to_value(conditions);
+    // ... existing ...
+    #[php_method] pub fn createIndex(&self, collection: String, field: String) -> bool { true } // Initial index stub
+    #[php_method] pub fn executeQuery(&self, collection: String, query_spec: &Zval) -> Zval {
+        let i = self.inner.as_ref().unwrap(); let q = zval_to_value(query_spec);
         let d = i.read().unwrap();
-        let arr = match rp(&d, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
-        value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
-    }
-    #[php_method] pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval {
-        let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap();
         let arr = match rp(&d, &collection) { Some(Value::Array(a)) => a, _ => return Zval::new() };
-        let vs: Vec<f64> = arr.iter().filter_map(|item| rn(item, &field)).filter_map(|v| v.as_f64()).collect();
-        if vs.is_empty() { return Zval::new(); }
-        let res = match operation.as_str() { "sum" => vs.iter().sum::<f64>(), "avg" => vs.iter().sum::<f64>() / vs.len() as f64, "count" => vs.len() as f64, _ => 0.0 };
-        value_to_zval(&json!(res))
-    }
-    #[php_method] pub fn validate(&self, path: String, schema: &Zval) -> Zval {
-        let i = self.inner.as_ref().unwrap(); let d = i.read().unwrap(); let sv = zval_to_value(schema);
-        let t = rp(&d, &path).unwrap_or(&Value::Null);
-        let mut errs = Vec::new();
-        if let Some(st) = sv.get("type").and_then(|v| v.as_str()) {
-           if (st == "string" && !t.is_string()) || (st == "number" && !t.is_number()) { errs.push(json!({"error": "type mismatch"})); }
-        }
-        value_to_zval(&json!({"valid": errs.is_empty(), "errors": errs}))
+        value_to_zval(&Value::Array(arr.clone())) // Fluent placeholder
     }
 }
 
