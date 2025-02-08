@@ -1,10 +1,17 @@
 [package]
 name = "rjson"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2021"
 authors = ["Mamel <mamel@rjson.dev>"]
 description = "High-performance JSON file storage engine for PHP, powered by Rust"
 license = "MIT"
+repository = "https://github.com/mamel/php-rjson"
+homepage = "https://github.com/mamel/php-rjson"
+documentation = "https://github.com/mamel/php-rjson/blob/main/docs/API.md"
+readme = "README.md"
+keywords = ["php", "json", "storage", "database", "extension"]
+categories = ["database", "filesystem"]
+rust-version = "1.75"
 
 [lib]
 crate-type = ["cdylib"]
@@ -15,3 +22,16 @@ ext-php-rs = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 memmap2 = "0.9"
+home = "=0.5.9"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+opt-level = 0
+
+[profile.test]
+opt-level = 1

@@ -1,12 +1,32 @@
 {
     "name": "mamel/rjson",
-    "description": "PHP stubs and build tools for rjson",
+    "description": "PHP stubs and build tools for rjson — a high-performance JSON file storage engine powered by Rust",
     "type": "php-ext-stubs",
     "license": "MIT",
+    "homepage": "https://github.com/mamel/php-rjson",
+    "keywords": ["json", "storage", "database", "rust", "extension", "nosql", "query"],
+    "authors": [
+        {
+            "name": "Mamel",
+            "role": "Developer"
+        }
+    ],
     "require": {
         "php": ">=8.1"
     },
     "autoload": {
         "files": []
+    },
+    "extra": {
+        "ide-stubs": "stubs/rjson.php"
+    },
+    "scripts": {
+        "build": "cargo build --release",
+        "test": "php -d extension=$(pwd)/target/release/librjson.so tests/run_tests.php",
+        "bench": "php -d extension=$(pwd)/target/release/librjson.so examples/benchmark.php"
+    },
+    "support": {
+        "issues": "https://github.com/mamel/php-rjson/issues",
+        "source": "https://github.com/mamel/php-rjson"
     }
 }
