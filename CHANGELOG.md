@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Core storage engine** — `Rjson\Store` PHP class backed by Rust
+- **Core storage engine** — `JsonQ\\Store` PHP class backed by Rust
   - Memory-mapped file reads (`memmap2`) for zero-copy access
   - Atomic writes (tmp + fsync + rename) for crash safety
   - Arc-based mtime cache for hot-read performance
@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Utilities**
   - `stats()` for file and data metadata
   - `backup()` / `restore()` for data safety
-  - `rjson_version()` standalone function
+  - `jsonq_version()` standalone function
 
 - **Project infrastructure**
   - PHP stubs for IDE autocompletion
@@ -67,5 +67,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Actions CI pipeline
   - MIT license
 
-[Unreleased]: https://github.com/mamel/php-rjson/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/mamel/php-rjson/releases/tag/v0.1.0
+[Unreleased]: https://github.com/mamel/JsonQ/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/mamel/JsonQ/releases/tag/v0.1.0

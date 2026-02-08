@@ -1,6 +1,6 @@
-# Contributing to rjson
+# Contributing to JsonQ
 
-Thanks for your interest in contributing to rjson! This document covers the development workflow and guidelines.
+Thanks for your interest in contributing to JsonQ! This document covers the development workflow and guidelines.
 
 ## Development Setup
 
@@ -13,8 +13,8 @@ Thanks for your interest in contributing to rjson! This document covers the deve
 ### Quick Start
 
 ```bash
-git clone https://github.com/mamel/php-rjson.git
-cd php-rjson
+git clone https://github.com/mamel/JsonQ.git
+cd JsonQ
 
 # Install dependencies (Ubuntu/Debian)
 sudo apt-get install php8.3-dev libclang-dev
@@ -26,16 +26,16 @@ cargo build
 cargo build --release
 
 # Run tests
-php -d "extension=$(pwd)/target/release/librjson.so" tests/run_tests.php
+php -d "extension=$(pwd)/target/release/libjsonq.so" tests/run_tests.php
 ```
 
 ### Project Structure
 
 ```
-php-rjson/
+JsonQ/
 ├── src/lib.rs          # Complete Rust implementation
 ├── Cargo.toml          # Rust dependencies and metadata
-├── stubs/rjson.php     # PHP stubs for IDE autocompletion
+├── stubs/JsonQ.php     # PHP stubs for IDE autocompletion
 ├── tests/
 │   └── run_tests.php   # Integration test suite
 ├── examples/           # Usage examples
@@ -71,8 +71,8 @@ php-rjson/
 ## Adding a New Feature
 
 1. **Implement in Rust** — Add the logic in `src/lib.rs`
-2. **Expose via PHP** — Add a `#[php_method]` to `RjsonStore`
-3. **Update stubs** — Add PHPDoc to `stubs/rjson.php`
+2. **Expose via PHP** — Add a `#[php_method]` to `JsonStore`
+3. **Update stubs** — Add PHPDoc to `stubs/JsonQ.php`
 4. **Add tests** — Cover happy path, edge cases, and error conditions
 5. **Update docs** — Add to README.md and CHANGELOG.md
 

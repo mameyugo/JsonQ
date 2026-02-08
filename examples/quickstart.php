@@ -1,16 +1,16 @@
 <?php
 /**
- * rjson Quick Start Example
+ * JsonQ Quick Start Example
  *
- * Run: php -d "extension=path/to/librjson.so" examples/quickstart.php
+ * Run: php -d "extension=path/to/libjsonq.so" examples/quickstart.php
  */
 
-use Rjson\Store;
+use JsonQ\\Store;
 
-echo "rjson Quick Start — v" . rjson_version() . "\n\n";
+echo "JsonQ Quick Start — v" . jsonq_version() . "\n\n";
 
 // ── 1. Create a store ──
-$store = new Store('/tmp/rjson_quickstart.json');
+$store = new Store('/tmp/jsonq_quickstart.json');
 
 // ── 2. Set data (dot-notation creates intermediates) ──
 $store->set('app.name', 'MyApp');
@@ -141,5 +141,5 @@ echo "Backup: {$backup}\n";
 echo "\n✅ Quick start complete!\n";
 
 // Cleanup
-unlink('/tmp/rjson_quickstart.json');
+unlink('/tmp/jsonq_quickstart.json');
 unlink($backup);

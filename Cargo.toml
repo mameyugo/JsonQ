@@ -1,13 +1,13 @@
 [package]
-name = "rjson"
+name = "jsonq"
 version = "0.1.0"
 edition = "2021"
-authors = ["Mamel <mamel@rjson.dev>"]
+authors = ["Mamel <info@mameyugo.com>"]
 description = "High-performance JSON file storage engine for PHP, powered by Rust"
 license = "MIT"
-repository = "https://github.com/mamel/php-rjson"
-homepage = "https://github.com/mamel/php-rjson"
-documentation = "https://github.com/mamel/php-rjson/blob/main/docs/API.md"
+repository = "https://github.com/mameyugo/JsonQ.git"
+homepage = "https://github.com/mameyugo/JsonQ"
+documentation = "https://github.com/mameyugo/JsonQ/blob/main/docs/API.md"
 readme = "README.md"
 keywords = ["php", "json", "storage", "database", "extension"]
 categories = ["database", "filesystem"]
@@ -15,7 +15,7 @@ rust-version = "1.75"
 
 [lib]
 crate-type = ["cdylib"]
-name = "rjson"
+name = "jsonq"
 
 [dependencies]
 ext-php-rs = "0.10"

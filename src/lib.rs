@@ -1,4 +1,4 @@
-//! rjson - High-performance JSON file storage engine for PHP
+//! JsonQ - High-performance JSON file storage engine for PHP
 //! Native PHP extension written in Rust via ext-php-rs.
 #![allow(non_snake_case)]
 
@@ -396,12 +396,12 @@ fn vld(data: &Value, schema: &Value, path: &str) -> Vec<Value> {
 
 // ══════════ PHP CLASS ══════════
 
-#[php_class(name = "Rjson\\Store")]
-pub struct RjsonStore { inner: Option<StoreInner> }
+#[php_class(name = "JsonQ\\Store")]
+pub struct JsonStore { inner: Option<StoreInner> }
 
 #[php_impl]
-impl RjsonStore {
-    #[php_method] pub fn __construct(path: String) -> RjsonStore { RjsonStore { inner: Some(StoreInner::new(path)) } }
+impl JsonStore {
+    #[php_method] pub fn __construct(path: String) -> JsonStore { JsonStore { inner: Some(StoreInner::new(path)) } }
 
     // ── Options ──
     #[php_method] pub fn setOption(&self, key: String, value: &Zval) -> bool {
@@ -537,7 +537,7 @@ impl RjsonStore {
     #[php_method] pub fn restore(&self, backup_path: String) -> PhpResult<bool> { let i = self.inner.as_ref().ok_or("Not init")?; fs::copy(&backup_path, &i.path).map_err(|e| ext_php_rs::exception::PhpException::default(e.to_string()))?; *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear(); Ok(true) }
 }
 
-#[php_function] pub fn rjson_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
+#[php_function] pub fn jsonq_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
 
 #[php_module]
 pub fn get_module(module: ModuleBuilder) -> ModuleBuilder { module }

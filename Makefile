@@ -1,7 +1,7 @@
 EXTENSION_DIR := $(shell php-config --extension-dir 2>/dev/null || echo "/usr/lib/php/extensions")
 PHP_VERSION := $(shell php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;" 2>/dev/null || echo "8.3")
-SO_FILE := target/release/librjson.so
-DYLIB_FILE := target/release/librjson.dylib
+SO_FILE := target/release/libjsonq.so
+DYLIB_FILE := target/release/libjsonq.dylib
 UNAME_S := $(shell uname -s)
 
 ifeq ($(UNAME_S),Darwin)
@@ -13,7 +13,7 @@ endif
 .PHONY: build debug test bench install uninstall clean help quickstart
 
 help: ## Show this help
-	@echo "rjson — High-performance JSON file storage for PHP"
+	@echo "JsonQ — High-performance JSON file storage for PHP"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
@@ -24,7 +24,7 @@ build: ## Build the extension (release mode)
 
 debug: ## Build the extension (debug mode)
 	cargo build
-	@echo "\n✅ Built: target/debug/librjson.so"
+	@echo "\n✅ Built: target/debug/libjsonq.so"
 
 test: build ## Run the test suite
 	php -d "extension=$$(pwd)/$(EXT_FILE)" tests/run_tests.php
@@ -37,15 +37,15 @@ quickstart: build ## Run quickstart example
 
 install: build ## Install the extension system-wide
 	@echo "Installing to $(EXTENSION_DIR)..."
-	sudo cp $(EXT_FILE) $(EXTENSION_DIR)/rjson.so
-	@echo "extension=rjson.so" | sudo tee /etc/php/$(PHP_VERSION)/cli/conf.d/20-rjson.ini > /dev/null 2>&1 || true
-	@echo "extension=rjson.so" | sudo tee /etc/php/$(PHP_VERSION)/fpm/conf.d/20-rjson.ini > /dev/null 2>&1 || true
-	@echo "\n✅ Installed! Verify with: php -m | grep rjson"
+	sudo cp $(EXT_FILE) $(EXTENSION_DIR)/jsonq.so
+	@echo "extension=jsonq.so" | sudo tee /etc/php/$(PHP_VERSION)/cli/conf.d/20-jsonq.ini > /dev/null 2>&1 || true
+	@echo "extension=jsonq.so" | sudo tee /etc/php/$(PHP_VERSION)/fpm/conf.d/20-jsonq.ini > /dev/null 2>&1 || true
+	@echo "\n✅ Installed! Verify with: php -m | grep jsonq"
 
 uninstall: ## Remove the extension
-	sudo rm -f $(EXTENSION_DIR)/rjson.so
-	sudo rm -f /etc/php/$(PHP_VERSION)/cli/conf.d/20-rjson.ini
-	sudo rm -f /etc/php/$(PHP_VERSION)/fpm/conf.d/20-rjson.ini
+	sudo rm -f $(EXTENSION_DIR)/jsonq.so
+	sudo rm -f /etc/php/$(PHP_VERSION)/cli/conf.d/20-jsonq.ini
+	sudo rm -f /etc/php/$(PHP_VERSION)/fpm/conf.d/20-jsonq.ini
 	@echo "✅ Uninstalled"
 
 clean: ## Clean build artifacts

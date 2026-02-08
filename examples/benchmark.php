@@ -1,13 +1,13 @@
 <?php
 /**
- * rjson Benchmark Suite
+ * JsonQ Benchmark Suite
  *
- * Compares rjson native extension vs pure PHP json_encode/json_decode.
- * Run: php -d "extension=path/to/librjson.so" examples/benchmark.php
+ * Compares JsonQ native extension vs pure PHP json_encode/json_decode.
+ * Run: php -d "extension=path/to/libjsonq.so" examples/benchmark.php
  */
 
 echo "╔══════════════════════════════════════════════════════╗\n";
-echo "║          rjson Benchmark Suite v" . rjson_version() . str_repeat(' ', 17) . "║\n";
+echo "║          JsonQ Benchmark Suite v" . jsonq_version() . str_repeat(' ', 17) . "║\n";
 echo "╚══════════════════════════════════════════════════════╝\n\n";
 
 $sizes = [100, 1_000, 10_000];
@@ -45,9 +45,9 @@ function bench(string $label, callable $fn, int $iterations = 1000): float {
     return $per_op;
 }
 
-function compare(float $rjson_ms, float $php_ms): void {
-    $ratio = $php_ms / $rjson_ms;
-    $faster = $ratio > 1 ? 'rjson' : 'PHP';
+function compare(float $jsonq_ms, float $php_ms): void {
+    $ratio = $php_ms / $jsonq_ms;
+    $faster = $ratio > 1 ? 'JsonQ' : 'PHP';
     $r = $ratio > 1 ? $ratio : 1 / $ratio;
     printf("  → %s is %.1fx faster\n\n", $faster, $r);
 }
@@ -58,9 +58,9 @@ foreach ($sizes as $size) {
     $users = generate_users($size);
     $iterations = max(10, (int)(10000 / $size));
 
-    // Setup rjson store
-    $rjsonPath = "/tmp/rjson_bench_{$size}.json";
-    $store = new Rjson\Store($rjsonPath);
+    // Setup JsonQ store
+    $JsonQPath = "/tmp/jsonq_bench_{$size}.json";
+    $store = new JsonQ\\Store($JsonQPath);
     $store->set('users', $users);
 
     // Setup PHP file
@@ -69,7 +69,7 @@ foreach ($sizes as $size) {
 
     // ── Write ──
     echo "Write:\n";
-    $rw = bench("rjson set()", function() use ($store, $users) {
+    $rw = bench("JsonQ set()", function() use ($store, $users) {
         $store->set('users', $users);
     }, $iterations);
 
@@ -80,7 +80,7 @@ foreach ($sizes as $size) {
 
     // ── Read (cached) ──
     echo "Read (cached):\n";
-    $rr = bench("rjson get()", function() use ($store) {
+    $rr = bench("JsonQ get()", function() use ($store) {
         $store->get('users');
     }, $iterations * 2);
 
@@ -91,7 +91,7 @@ foreach ($sizes as $size) {
 
     // ── Find (scan) ──
     echo "Find (full scan, role='admin'):\n";
-    $rf = bench("rjson find()", function() use ($store) {
+    $rf = bench("JsonQ find()", function() use ($store) {
         $store->find('users', ['role' => 'admin']);
     }, $iterations);
 
@@ -104,14 +104,14 @@ foreach ($sizes as $size) {
     // ── Find (indexed) ──
     echo "Find (indexed, role='admin'):\n";
     $store->createIndex('users', 'role');
-    $ri = bench("rjson indexLookup()", function() use ($store) {
+    $ri = bench("JsonQ indexLookup()", function() use ($store) {
         $store->indexLookup('users', 'role', 'admin');
     }, $iterations * 5);
     echo sprintf("  (vs scan: %.3f ms/op → %.3f ms/op = %.0fx faster)\n\n", $rf, $ri, $rf / max($ri, 0.001));
 
     // ── Complex query ──
     echo "Complex query (age>25, score>50, limit 10, sorted):\n";
-    $rc = bench("rjson executeQuery()", function() use ($store) {
+    $rc = bench("JsonQ executeQuery()", function() use ($store) {
         $store->executeQuery('users', [
             'where'    => [
                 ['field' => 'age', 'op' => '>', 'value' => 25],
@@ -132,7 +132,7 @@ foreach ($sizes as $size) {
 
     // ── Aggregation ──
     echo "Aggregation (avg age):\n";
-    $ra = bench("rjson aggregate()", function() use ($store) {
+    $ra = bench("JsonQ aggregate()", function() use ($store) {
         $store->aggregate('users', 'age', 'avg');
     }, $iterations);
 
@@ -144,18 +144,18 @@ foreach ($sizes as $size) {
 
     // Cleanup
     $store->dropAllIndexes();
-    unlink($rjsonPath);
+    unlink($JsonQPath);
     unlink($phpPath);
 }
 
 // ── File size comparison ──
 echo "━━━ Extension size ━━━\n\n";
-$soFiles = glob(dirname(__DIR__) . '/target/release/librjson.so');
-if (empty($soFiles)) $soFiles = glob(dirname(__DIR__) . '/target/release/librjson.dylib');
+$soFiles = glob(dirname(__DIR__) . '/target/release/libjsonq.so');
+if (empty($soFiles)) $soFiles = glob(dirname(__DIR__) . '/target/release/libjsonq.dylib');
 if (!empty($soFiles)) {
     $soSize = filesize($soFiles[0]);
     $h = $soSize < 1048576 ? sprintf("%.0f KB", $soSize / 1024) : sprintf("%.1f MB", $soSize / 1048576);
-    echo "  librjson.so: {$h}\n";
+    echo "  libjsonq.so: {$h}\n";
 } else {
     echo "  (extension file not found in expected path)\n";
 }

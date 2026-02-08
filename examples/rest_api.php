@@ -1,9 +1,9 @@
 <?php
 /**
- * rjson REST API Example
+ * JsonQ REST API Example
  *
- * Demonstrates using rjson as a backend for a simple REST API.
- * Run: php -d "extension=path/to/librjson.so" -S localhost:8080 examples/rest_api.php
+ * Demonstrates using JsonQ as a backend for a simple REST API.
+ * Run: php -d "extension=path/to/libjsonq.so" -S localhost:8080 examples/rest_api.php
  *
  * Endpoints:
  *   GET    /users              — List users (supports ?role=admin&sort=age&limit=10)
@@ -14,7 +14,7 @@
  *   GET    /users/stats        — Aggregation stats
  */
 
-use Rjson\Store;
+use JsonQ\\Store;
 
 // ── Setup ──
 $store = new Store(__DIR__ . '/../storage/api_data.json');

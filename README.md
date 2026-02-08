@@ -1,11 +1,11 @@
 <p align="center">
-  <h1 align="center">rjson</h1>
+  <h1 align="center">JsonQ</h1>
   <p align="center">
     <strong>High-performance JSON file storage engine for PHP, powered by Rust</strong>
   </p>
   <p align="center">
-    <a href="https://github.com/mamel/php-rjson/actions"><img src="https://github.com/mamel/php-rjson/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://packagist.org/packages/mamel/rjson"><img src="https://img.shields.io/packagist/v/mamel/rjson" alt="Version"></a>
+    <a href="https://github.com/mamel/JsonQ/actions"><img src="https://github.com/mamel/JsonQ/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://packagist.org/packages/mamel/jsonq"><img src="https://img.shields.io/packagist/v/mamel/jsonq" alt="Version"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
     <img src="https://img.shields.io/badge/PHP-8.1%2B-8892BF.svg" alt="PHP 8.1+">
     <img src="https://img.shields.io/badge/Rust-1.75%2B-DEA584.svg" alt="Rust 1.75+">
@@ -14,11 +14,11 @@
 
 ---
 
-**rjson** is a native PHP extension written in Rust that provides a complete JSON file storage engine with MongoDB-style queries, fluent query builder, aggregation, schema validation, and in-memory indexes — all without requiring a database server.
+**JsonQ** is a native PHP extension written in Rust that provides a complete JSON file storage engine with MongoDB-style queries, fluent query builder, aggregation, schema validation, and in-memory indexes — all without requiring a database server.
 
-## Why rjson?
+## Why JsonQ?
 
-| Feature | `json_encode`/`file_put_contents` | SQLite | **rjson** |
+| Feature | `json_encode`/`file_put_contents` | SQLite | **JsonQ** |
 |---------|-----------------------------------|--------|-----------|
 | Setup | None | Minimal | None |
 | Query engine | ❌ Manual loops | ✅ SQL | ✅ MongoDB + Fluent |
@@ -31,7 +31,7 @@
 ## Quick Start
 
 ```php
-use Rjson\Store;
+use JsonQ\\Store;
 
 $store = new Store('/path/to/data.json');
 
@@ -71,8 +71,8 @@ $admins = $store->indexLookup('users', 'role', 'admin');
 ### From Source
 
 ```bash
-git clone https://github.com/mamel/php-rjson.git
-cd php-rjson
+git clone https://github.com/mamel/JsonQ.git
+cd JsonQ
 
 # Install system dependencies (Ubuntu/Debian)
 sudo apt-get install php8.3-dev libclang-dev
@@ -81,12 +81,12 @@ sudo apt-get install php8.3-dev libclang-dev
 cargo build --release
 
 # Install the extension
-sudo cp target/release/librjson.so $(php-config --extension-dir)/rjson.so
-echo "extension=rjson.so" | sudo tee /etc/php/8.3/cli/conf.d/20-rjson.ini
+sudo cp target/release/libjsonq.so $(php-config --extension-dir)/jsonq.so
+echo "extension=jsonq.so" | sudo tee /etc/php/8.3/cli/conf.d/20-JsonQ.ini
 
 # Verify
-php -m | grep rjson
-php -r "echo rjson_version();"
+php -m | grep JsonQ
+php -r "echo jsonq_version();"
 ```
 
 ### macOS
@@ -95,7 +95,7 @@ php -r "echo rjson_version();"
 brew install php rust llvm
 export LIBCLANG_PATH=$(brew --prefix llvm)/lib
 cargo build --release
-sudo cp target/release/librjson.dylib $(php-config --extension-dir)/rjson.so
+sudo cp target/release/libjsonq.dylib $(php-config --extension-dir)/jsonq.so
 ```
 
 ## API Reference
@@ -103,7 +103,7 @@ sudo cp target/release/librjson.dylib $(php-config --extension-dir)/rjson.so
 ### CRUD Operations
 
 ```php
-$store = new Rjson\Store('data.json');  // Creates file if needed
+$store = new JsonQ\\Store('data.json');  // Creates file if needed
 
 // Read
 $store->get('path.to.value');           // Dot-notation access
@@ -289,7 +289,7 @@ $store->clear();                   // Reset to {}
 ```
 ┌─────────────────────────────┐
 │        PHP Userland         │
-│   new Rjson\Store($path)    │
+│   new JsonQ\\Store($path)    │
 └──────────┬──────────────────┘
            │ Native PHP class (ext-php-rs)
            │ Zero serialization overhead
@@ -324,7 +324,7 @@ $store->clear();                   // Reset to {}
 
 ## Performance
 
-rjson is designed for datasets from hundreds to hundreds of thousands of records. Typical performance characteristics:
+JsonQ is designed for datasets from hundreds to hundreds of thousands of records. Typical performance characteristics:
 
 | Operation | 1K records | 10K records | 100K records |
 |-----------|-----------|------------|-------------|
@@ -338,7 +338,7 @@ rjson is designed for datasets from hundreds to hundreds of thousands of records
 
 ```bash
 # Run PHP integration tests
-php -d "extension=$(pwd)/target/release/librjson.so" tests/run_tests.php
+php -d "extension=$(pwd)/target/release/libjsonq.so" tests/run_tests.php
 
 # Run Rust unit tests
 cargo test

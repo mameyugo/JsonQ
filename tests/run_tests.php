@@ -1,9 +1,9 @@
 <?php
 /**
- * rjson Test Suite
+ * JsonQ Test Suite
  *
- * Comprehensive integration tests for the rjson PHP extension.
- * Run: php -d "extension=path/to/librjson.so" tests/run_tests.php
+ * Comprehensive integration tests for the JsonQ PHP extension.
+ * Run: php -d "extension=path/to/libjsonq.so" tests/run_tests.php
  */
 
 $passed = 0;
@@ -48,29 +48,29 @@ function assert_null($val, string $msg = ''): void {
     if ($val !== null) throw new \RuntimeException($msg ?: "Expected null");
 }
 
-function fresh_store(): \Rjson\Store {
-    $path = tempnam(sys_get_temp_dir(), 'rjson_test_') . '.json';
-    return new \Rjson\Store($path);
+function fresh_store(): \JsonQ\\Store {
+    $path = tempnam(sys_get_temp_dir(), 'jsonq_test_') . '.json';
+    return new \JsonQ\\Store($path);
 }
 
 // ═══════════════════════════════════════════
-echo "\n🧪 rjson Test Suite v" . rjson_version() . "\n";
+echo "\n🧪 JsonQ Test Suite v" . jsonq_version() . "\n";
 echo str_repeat('═', 50) . "\n";
 
 // ── Module ──
 echo "\n📦 Module\n";
 
-test('rjson_version returns string', function() {
-    assert_eq('0.1.0', rjson_version());
+test('jsonq_version returns string', function() {
+    assert_eq('0.1.0', jsonq_version());
 });
 
-test('Rjson\\Store class exists', function() {
-    assert_true(class_exists('Rjson\\Store'));
+test('JsonQ\\Store class exists', function() {
+    assert_true(class_exists('JsonQ\\Store'));
 });
 
 test('Constructor creates file', function() {
-    $path = tempnam(sys_get_temp_dir(), 'rjson_') . '.json';
-    new \Rjson\Store($path);
+    $path = tempnam(sys_get_temp_dir(), 'JsonQ_') . '.json';
+    new \JsonQ\\Store($path);
     assert_true(file_exists($path));
     assert_eq('{}', trim(file_get_contents($path)));
     unlink($path);
@@ -201,7 +201,7 @@ test('increment and decrement', function() {
 // ── MongoDB Queries ──
 echo "\n🔍 MongoDB-Style Queries\n";
 
-function store_with_users(): \Rjson\Store {
+function store_with_users(): \JsonQ\\Store {
     $s = fresh_store();
     $s->set('users', [
         ['name' => 'Alice',   'age' => 30, 'city' => 'NYC',    'role' => 'admin',  'score' => 95],
@@ -590,11 +590,11 @@ test('backup and restore', function() {
 });
 
 test('data persists across instances', function() {
-    $path = tempnam(sys_get_temp_dir(), 'rjson_persist_') . '.json';
-    $s1 = new \Rjson\Store($path);
+    $path = tempnam(sys_get_temp_dir(), 'JsonQ_persist_') . '.json';
+    $s1 = new \JsonQ\\Store($path);
     $s1->set('persistent', true);
     unset($s1);
-    $s2 = new \Rjson\Store($path);
+    $s2 = new \JsonQ\\Store($path);
     assert_true($s2->get('persistent'));
     unlink($path);
 });

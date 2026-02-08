@@ -1,6 +1,6 @@
 # API Reference
 
-Complete reference for all `Rjson\Store` methods and the `rjson_version()` function.
+Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
 ## Table of Contents
 
@@ -18,12 +18,12 @@ Complete reference for all `Rjson\Store` methods and the `rjson_version()` funct
 
 ## Constructor
 
-### `new Rjson\Store(string $path)`
+### `new JsonQ\\Store(string $path)`
 
 Creates a new store instance bound to a JSON file. If the file does not exist, it is created with `{}`.
 
 ```php
-$store = new Rjson\Store('/var/data/app.json');
+$store = new JsonQ\\Store('/var/data/app.json');
 ```
 
 **Parameters:**
@@ -442,10 +442,10 @@ $store->restore('/backups/snap.json');
 
 ## Standalone Functions
 
-### `rjson_version(): string`
+### `jsonq_version(): string`
 
 Returns the extension version string.
 
 ```php
-echo rjson_version(); // "0.1.0"
+echo jsonq_version(); // "0.1.0"
 ```

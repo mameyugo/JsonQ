@@ -1,15 +1,15 @@
 <?php
 /**
- * rjson — High-performance JSON file storage engine for PHP
+ * JsonQ — High-performance JSON file storage engine for PHP
  *
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
- * @package rjson
+ * @package JsonQ
  * @version 0.1.0
  * @license MIT
  */
 
-namespace Rjson;
+namespace JsonQ;
 
 /**
  * High-performance JSON file storage engine backed by Rust.
@@ -430,8 +430,8 @@ class Store
 }
 
 /**
- * Get the rjson extension version.
+ * Get the JsonQ extension version.
  *
  * @return string Semantic version string (e.g., "0.1.0")
  */
-function rjson_version(): string {}
+function jsonq_version(): string {}
