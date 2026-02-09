@@ -1,0 +1,20 @@
+# Rust
+/target
+Cargo.lock
+
+# PHP
+/vendor
+composer.lock
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated reports
+report.html

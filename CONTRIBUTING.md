@@ -13,7 +13,7 @@ Thanks for your interest in contributing to JsonQ! This document covers the deve
 ### Quick Start
 
 ```bash
-git clone https://github.com/mamel/JsonQ.git
+git clone https://github.com/mameyugo/JsonQ.git
 cd JsonQ
 
 # Install dependencies (Ubuntu/Debian)

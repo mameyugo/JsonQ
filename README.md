@@ -4,8 +4,8 @@
     <strong>High-performance JSON file storage engine for PHP, powered by Rust</strong>
   </p>
   <p align="center">
-    <a href="https://github.com/mamel/JsonQ/actions"><img src="https://github.com/mamel/JsonQ/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-    <a href="https://packagist.org/packages/mamel/jsonq"><img src="https://img.shields.io/packagist/v/mamel/jsonq" alt="Version"></a>
+    <a href="https://github.com/mameyugo/JsonQ/actions"><img src="https://github.com/mameyugo/JsonQ/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://packagist.org/packages/mameyugo/jsonq"><img src="https://img.shields.io/packagist/v/mameyugo/jsonq" alt="Version"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
     <img src="https://img.shields.io/badge/PHP-8.1%2B-8892BF.svg" alt="PHP 8.1+">
     <img src="https://img.shields.io/badge/Rust-1.75%2B-DEA584.svg" alt="Rust 1.75+">
@@ -71,7 +71,7 @@ $admins = $store->indexLookup('users', 'role', 'admin');
 ### From Source
 
 ```bash
-git clone https://github.com/mamel/JsonQ.git
+git clone https://github.com/mameyugo/JsonQ.git
 cd JsonQ
 
 # Install system dependencies (Ubuntu/Debian)

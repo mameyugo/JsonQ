@@ -1,5 +1,5 @@
 {
-    "name": "mamel/jsonq",
+    "name": "mameyugo/jsonq",
     "description": "PHP stubs and build tools for JsonQ — a high-performance JSON file storage engine powered by Rust",
     "type": "php-ext-stubs",
     "license": "MIT",
@@ -7,7 +7,7 @@
     "keywords": ["json", "storage", "database", "rust", "extension", "nosql", "query"],
     "authors": [
         {
-            "name": "Mamel",
+            "name": "Mameyugo",
             "email": "info@mameyugo.com",
             "role": "Developer"
         }
