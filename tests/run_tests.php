@@ -48,9 +48,9 @@ function assert_null($val, string $msg = ''): void {
     if ($val !== null) throw new \RuntimeException($msg ?: "Expected null");
 }
 
-function fresh_store(): \JsonQ\\Store {
+function fresh_store(): \JsonQ\Store {
     $path = tempnam(sys_get_temp_dir(), 'jsonq_test_') . '.json';
-    return new \JsonQ\\Store($path);
+    return new \JsonQ\Store($path);
 }
 
 // ═══════════════════════════════════════════
@@ -70,7 +70,7 @@ test('JsonQ\\Store class exists', function() {
 
 test('Constructor creates file', function() {
     $path = tempnam(sys_get_temp_dir(), 'JsonQ_') . '.json';
-    new \JsonQ\\Store($path);
+    new \JsonQ\Store($path);
     assert_true(file_exists($path));
     assert_eq('{}', trim(file_get_contents($path)));
     unlink($path);
@@ -201,7 +201,7 @@ test('increment and decrement', function() {
 // ── MongoDB Queries ──
 echo "\n🔍 MongoDB-Style Queries\n";
 
-function store_with_users(): \JsonQ\\Store {
+function store_with_users(): \JsonQ\Store {
     $s = fresh_store();
     $s->set('users', [
         ['name' => 'Alice',   'age' => 30, 'city' => 'NYC',    'role' => 'admin',  'score' => 95],
@@ -591,10 +591,10 @@ test('backup and restore', function() {
 
 test('data persists across instances', function() {
     $path = tempnam(sys_get_temp_dir(), 'JsonQ_persist_') . '.json';
-    $s1 = new \JsonQ\\Store($path);
+    $s1 = new \JsonQ\Store($path);
     $s1->set('persistent', true);
     unset($s1);
-    $s2 = new \JsonQ\\Store($path);
+    $s2 = new \JsonQ\Store($path);
     assert_true($s2->get('persistent'));
     unlink($path);
 });

@@ -63,7 +63,11 @@ fn ht_to_value(ht: &ext_php_rs::types::ZendHashTable) -> Value {
         exp += 1;
     }
     if is_seq && ht.len() > 0 {
-        Value::Array(ht.iter().map(|(_, _, v)| zval_to_value(v)).collect())
+        let mut arr = Vec::with_capacity(ht.len());
+        for (_, _, val) in ht.iter() {
+            arr.push(zval_to_value(val));
+        }
+        Value::Array(arr)
     } else {
         let mut map = Map::new();
         for (idx, key, val) in ht.iter() {
