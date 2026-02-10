@@ -59,7 +59,7 @@ fn ht_to_value(ht: &ext_php_rs::types::ZendHashTable) -> Value {
     for (key, _) in ht.iter() {
         match key {
             ArrayKey::Long(idx) if idx as u64 == exp => { exp += 1; }
-            ArrayKey::String(_) | ArrayKey::Str(_) => { is_seq = false; break; }
+            ArrayKey::String(_) => { is_seq = false; break; }
             _ => { is_seq = false; break; }
         }
     }
@@ -72,7 +72,6 @@ fn ht_to_value(ht: &ext_php_rs::types::ZendHashTable) -> Value {
         for (key, val) in ht.iter() {
             let k = match key {
                 ArrayKey::String(s) => s.to_string(),
-                ArrayKey::Str(s) => s.to_string(),
                 ArrayKey::Long(idx) => idx.to_string(),
             };
             map.insert(k, zval_to_value(val));
@@ -438,8 +437,7 @@ fn vld(v: &Value, s: &Value, p: &str) -> Vec<Value> {
 
 // ══════════ PHP CLASS ══════════
 
-#[php_class]
-#[php(name = "JsonQ\\Store")]
+#[php_class(name = "JsonQ\\Store")]
 pub struct JsonStore { inner: Option<StoreInner> }
 
 #[php_impl]
@@ -448,7 +446,7 @@ impl JsonStore {
 
     #[php(name = "setOption")]
     pub fn set_option(&self, key: String, value: &Zval) -> bool {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return false };
+        let i = match &self.inner { Some(i) => i, None => return false };
         let mut opts = i.opts.write().unwrap();
         match key.as_str() {
             "pretty" | "pretty_print" => { opts.pretty = value.bool().unwrap_or(false); true }
@@ -459,7 +457,7 @@ impl JsonStore {
     
     #[php(name = "getOption")]
     pub fn get_option(&self, key: String) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() };
         let opts = i.opts.read().unwrap();
         let mut z = Zval::new();
         match key.as_str() { "pretty"|"pretty_print" => { z.set_bool(opts.pretty); } "fsync"|"sync" => { z.set_bool(opts.fsync); } _ => {} }
@@ -468,7 +466,7 @@ impl JsonStore {
 
     #[php(name = "beginTransaction")]
     pub fn begin_transaction(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let data = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         *i.tx_data.write().unwrap() = Some(data);
         *i.in_transaction.write().unwrap() = true;
@@ -476,7 +474,7 @@ impl JsonStore {
     }
     
     pub fn commit(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let data = i.tx_data.read().unwrap().clone().ok_or("No active transaction")?;
         *i.in_transaction.write().unwrap() = false;
         *i.tx_data.write().unwrap() = None;
@@ -485,18 +483,18 @@ impl JsonStore {
     }
     
     pub fn rollback(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         *i.in_transaction.write().unwrap() = false;
         *i.tx_data.write().unwrap() = None;
         Ok(true)
     }
     
     #[php(name = "inTransaction")]
-    pub fn in_transaction(&self) -> bool { self.inner.as_ref().map(|i: &StoreInner| *i.in_transaction.read().unwrap()).unwrap_or(false) }
+    pub fn in_transaction(&self) -> bool { self.inner.as_ref().map(|i| *i.in_transaction.read().unwrap()).unwrap_or(false) }
 
     #[php(name = "setMany")]
     pub fn set_many(&self, pairs: &Zval) -> PhpResult<i64> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let pv = zval_to_value(pairs);
         let po = match pv.as_object() { Some(o) => o, None => return Ok(0) };
         let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
@@ -509,7 +507,7 @@ impl JsonStore {
     
     #[php(name = "removeMany")]
     pub fn remove_many(&self, paths: Vec<String>) -> PhpResult<i64> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
@@ -520,26 +518,26 @@ impl JsonStore {
 
     #[php(name = "toJson")]
     pub fn to_json(&self, pretty: Option<bool>) -> PhpResult<String> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         if pretty.unwrap_or(false) { serde_json::to_string_pretty(&*cd).map_err(|e| e.to_string().into()) } else { serde_json::to_string(&*cd).map_err(|e| e.to_string().into()) }
     }
     
     #[php(name = "fromJson")]
     pub fn from_json(&self, json_str: String) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let data: Value = serde_json::from_str(&json_str).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         Ok(true)
     }
 
     #[php(name = "getAll")]
-    pub fn get_all(&self) -> Zval { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| value_to_zval(&cd)).ok()).unwrap_or_else(Zval::new) }
+    pub fn get_all(&self) -> Zval { self.inner.as_ref().and_then(|i| i.read().map(|cd: Arc<Value>| value_to_zval(&cd)).ok()).unwrap_or_else(Zval::new) }
     
-    pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?; Ok(true) }
+    pub fn clear(&self) -> PhpResult<bool> { let i = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?; Ok(true) }
     
     pub fn search(&self, collection: String, keyword: String) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() };
         let kw = keyword.to_lowercase();
         i.read().map(|cd: Arc<Value>| {
             let arr = match rp(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
@@ -548,45 +546,45 @@ impl JsonStore {
         }).unwrap_or_else(|_| Zval::new())
     }
 
-    pub fn get(&self, path: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| rp(&cd, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new)).unwrap_or_else(|_| Zval::new()) }
-    pub fn has(&self, path: String) -> bool { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| rp(&cd, &path).is_some()).ok()).unwrap_or(false) }
-    pub fn count(&self, path: String) -> i64 { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match rp(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) }
-    pub fn keys(&self, path: String) -> Vec<String> { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match if path.is_empty(){Some(cd.as_ref())}else{rp(&cd,&path)} { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() }
+    pub fn get(&self, path: String) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| rp(&cd, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new)).unwrap_or_else(|_| Zval::new()) }
+    pub fn has(&self, path: String) -> bool { self.inner.as_ref().and_then(|i| i.read().map(|cd: Arc<Value>| rp(&cd, &path).is_some()).ok()).unwrap_or(false) }
+    pub fn count(&self, path: String) -> i64 { self.inner.as_ref().and_then(|i| i.read().map(|cd: Arc<Value>| match rp(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) }
+    pub fn keys(&self, path: String) -> Vec<String> { self.inner.as_ref().and_then(|i| i.read().map(|cd: Arc<Value>| match if path.is_empty(){Some(cd.as_ref())}else{rp(&cd,&path)} { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() }
 
-    pub fn set(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| sap(d, &path, v)).is_ok() }
-    pub fn remove(&self, path: String) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { rap(d, &path); }).is_ok() }
-    pub fn push(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match if path.is_empty(){Some(d)}else{rpm(d, &path)} { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
-    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = if path.is_empty(){Some(&mut *d)}else{rpm(d,&path)} { merge_v(e, &nv); } else { sap(d, &path, nv); } }).is_ok() }
-    pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = rpm(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
+    pub fn set(&self, path: String, value: &Zval) -> bool { let i = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| sap(d, &path, v)).is_ok() }
+    pub fn remove(&self, path: String) -> bool { let i = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { rap(d, &path); }).is_ok() }
+    pub fn push(&self, path: String, value: &Zval) -> bool { let i = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match if path.is_empty(){Some(d)}else{rpm(d, &path)} { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
+    pub fn merge(&self, path: String, value: &Zval) -> bool { let i = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = if path.is_empty(){Some(&mut *d)}else{rpm(d,&path)} { merge_v(e, &nv); } else { sap(d, &path, nv); } }).is_ok() }
+    pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = rpm(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
     pub fn decrement(&self, path: String, amount: Option<f64>) -> bool { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
 
     pub fn find(&self, collection: String, conditions: &Zval) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
         i.read().map(|cd: Arc<Value>| {
             let arr = match rp(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
-            if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<Value>>())); } } } } }
+            if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect())); } } } } }
             value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
         }).unwrap_or_else(|_| Zval::new())
     }
     
     #[php(name = "findOne")]
-    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| mat(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| mat(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "executeQuery")]
-    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(exec_fluent(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(exec_fluent(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
 
-    pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&agg(a, &field, &operation)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&agg(a, &field, &operation)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "groupBy")]
-    pub fn group_by(&self, collection: String, field: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&grp(a, &field)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn group_by(&self, collection: String, field: String) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&grp(a, &field)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
-    pub fn pluck(&self, collection: String, fields: Vec<String>) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let fr: Vec<&str> = fields.iter().map(|s| s.as_str()).collect(); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(plk(a, &fr))), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn pluck(&self, collection: String, fields: Vec<String>) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let fr: Vec<&str> = fields.iter().map(|s| s.as_str()).collect(); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(plk(a, &fr))), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
 
-    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = if path.is_empty(){cd.as_ref()}else{match rp(&cd,&path){Some(v)=>v,None=>return Zval::new()}}; let e = vld(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = if path.is_empty(){cd.as_ref()}else{match rp(&cd,&path){Some(v)=>v,None=>return Zval::new()}}; let e = vld(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "validateCollection")]
     pub fn validate_collection(&self, path: String, item_schema: &Zval) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(item_schema);
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(item_schema);
         i.read().map(|cd: Arc<Value>| {
             let arr = match rp(&cd, &path) { Some(Value::Array(a)) => a, _ => return Zval::new() };
             let mut ae = Vec::new(); let mut inv = 0usize;
@@ -596,38 +594,38 @@ impl JsonStore {
     }
 
     #[php(name = "createIndex")]
-    pub fn create_index(&self, collection: String, field: String) -> bool { self.inner.as_ref().map(|i: &StoreInner| i.build_index(&collection, &field).is_ok()).unwrap_or(false) }
+    pub fn create_index(&self, collection: String, field: String) -> bool { self.inner.as_ref().map(|i| i.build_index(&collection, &field).is_ok()).unwrap_or(false) }
     
     #[php(name = "createCompoundIndex")]
-    pub fn create_compound_index(&self, collection: String, fields: Vec<String>) -> bool { self.inner.as_ref().map(|i: &StoreInner| i.build_compound(&collection, &fields).is_ok()).unwrap_or(false) }
+    pub fn create_compound_index(&self, collection: String, fields: Vec<String>) -> bool { self.inner.as_ref().map(|i| i.build_compound(&collection, &fields).is_ok()).unwrap_or(false) }
     
     #[php(name = "indexLookup")]
     pub fn index_lookup(&self, collection: String, field: String, value: &Zval) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let v = zval_to_value(value);
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let v = zval_to_value(value);
         if let Some(pos) = i.idx_lookup(&collection, &field, &v) {
-            i.read().map(|cd: Arc<Value>| if let Some(Value::Array(a)) = rp(&cd, &collection) { value_to_zval(&Value::Array(pos.iter().filter_map(|&j| a.get(j).cloned()).collect::<Vec<Value>>())) } else { Zval::new() }).unwrap_or_else(|_| Zval::new())
+            i.read().map(|cd: Arc<Value>| if let Some(Value::Array(a)) = rp(&cd, &collection) { value_to_zval(&Value::Array(pos.iter().filter_map(|&j| a.get(j).cloned()).collect())) } else { Zval::new() }).unwrap_or_else(|_| Zval::new())
         } else { Zval::new() }
     }
     
     #[php(name = "listIndexes")]
     pub fn list_indexes(&self) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let idx = i.indexes.read().unwrap();
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let idx = i.indexes.read().unwrap();
         let mut r = Vec::new();
         for (c, s) in idx.iter() {
-            for (f, im) in &s.single { let uv = im.len(); let te: usize = im.values().map(|v: &Vec<usize>|v.len()).sum(); r.push(json!({"collection":c,"type":"single","field":f,"unique_values":uv,"total_entries":te})); }
-            for (f, im) in &s.compound { let uv = im.len(); let te: usize = im.values().map(|v: &Vec<usize>|v.len()).sum(); r.push(json!({"collection":c,"type":"compound","fields":f,"unique_values":uv,"total_entries":te})); }
+            for (f, im) in &s.single { r.push(json!({"collection":c,"type":"single","field":f,"unique_values":im.len(),"total_entries":im.values().map(|v: &Vec<usize>|v.len()).sum::<usize>()})); }
+            for (f, im) in &s.compound { r.push(json!({"collection":c,"type":"compound","fields":f,"unique_values":im.len(),"total_entries":im.values().map(|v: &Vec<usize>|v.len()).sum::<usize>()})); }
         }
         value_to_zval(&Value::Array(r))
     }
     
     #[php(name = "dropIndex")]
-    pub fn drop_index(&self, collection: String) -> bool { self.inner.as_ref().map(|i: &StoreInner| i.indexes.write().unwrap().remove(&collection).is_some()).unwrap_or(false) }
+    pub fn drop_index(&self, collection: String) -> bool { self.inner.as_ref().map(|i| i.indexes.write().unwrap().remove(&collection).is_some()).unwrap_or(false) }
     
     #[php(name = "dropAllIndexes")]
-    pub fn drop_all_indexes(&self) -> i64 { self.inner.as_ref().map(|i: &StoreInner| { let mut idx = i.indexes.write().unwrap(); let c = idx.len() as i64; idx.clear(); c }).unwrap_or(0) }
+    pub fn drop_all_indexes(&self) -> i64 { self.inner.as_ref().map(|i| { let mut idx = i.indexes.write().unwrap(); let c = idx.len() as i64; idx.clear(); c }).unwrap_or(0) }
 
     pub fn stats(&self) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let meta = match fs::metadata(&i.path) { Ok(m) => m, Err(_) => return Zval::new() };
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() }; let meta = match fs::metadata(&i.path) { Ok(m) => m, Err(_) => return Zval::new() };
         i.read().map(|cd: Arc<Value>| {
             let fs = meta.len(); let fsh = if fs<1024{format!("{} B",fs)}else if fs<1048576{format!("{:.2} KB",fs as f64/1024.0)}else{format!("{:.2} MB",fs as f64/1048576.0)};
             let keys: Vec<Value> = if let Value::Object(o) = cd.as_ref() { o.keys().map(|k| Value::String(k.clone())).collect() } else { vec![] };
@@ -638,14 +636,14 @@ impl JsonStore {
     }
     
     pub fn backup(&self, backup_path: Option<String>) -> PhpResult<String> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let t = match backup_path { Some(p) if !p.is_empty() => p, _ => format!("{}.backup.{}",i.path.to_string_lossy(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()) };
         fs::copy(&i.path, &t).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         Ok(t)
     }
     
     pub fn restore(&self, backup_path: String) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         fs::copy(&backup_path, &i.path).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear();
         Ok(true)
