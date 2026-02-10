@@ -16,5 +16,10 @@ composer.lock
 .DS_Store
 Thumbs.db
 
-# Generated reports
-report.html
+# Generated reports & test artifacts
+/tests/test_report.html
+/tests/*.json
+/tests/*.tmp
+/storage/*.json
+/tmp/jsonq_*.json
+debug_*

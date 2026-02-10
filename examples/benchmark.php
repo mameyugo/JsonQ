@@ -60,7 +60,7 @@ foreach ($sizes as $size) {
 
     // Setup JsonQ store
     $JsonQPath = "/tmp/jsonq_bench_{$size}.json";
-    $store = new JsonQ\\Store($JsonQPath);
+    $store = new JsonQ\Store($JsonQPath);
     $store->set('users', $users);
 
     // Setup PHP file

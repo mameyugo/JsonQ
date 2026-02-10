@@ -5,7 +5,7 @@
  * Run: php -d "extension=path/to/libjsonq.so" examples/quickstart.php
  */
 
-use JsonQ\\Store;
+use JsonQ\Store;
 
 echo "JsonQ Quick Start — v" . jsonq_version() . "\n\n";
 

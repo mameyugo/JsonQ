@@ -14,7 +14,7 @@
  *   GET    /users/stats        — Aggregation stats
  */
 
-use JsonQ\\Store;
+use JsonQ\Store;
 
 // ── Setup ──
 $store = new Store(__DIR__ . '/../storage/api_data.json');
