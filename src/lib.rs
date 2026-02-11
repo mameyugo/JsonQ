@@ -1,4 +1,5 @@
 //! JsonQ - High-performance JSON file storage engine for PHP
+#![cfg_attr(windows, feature(abi_vectorcall))]
 #![allow(non_snake_case)]
 
 use ext_php_rs::prelude::*;

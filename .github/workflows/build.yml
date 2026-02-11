@@ -59,6 +59,18 @@ jobs:
           echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> $GITHUB_ENV
           echo "$(brew --prefix llvm)/bin" >> $GITHUB_PATH
 
+      - name: Configure linker flags (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p .cargo
+          cat > .cargo/config.toml << 'EOF'
+          [target.aarch64-apple-darwin]
+          rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+          [target.x86_64-apple-darwin]
+          rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+          EOF
+
       - name: Build Extension
         run: cargo build --release
 
