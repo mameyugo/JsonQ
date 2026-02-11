@@ -36,16 +36,6 @@ jobs:
         if: runner.os == 'Windows'
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Configure rust-lld linker (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          mkdir -p .cargo
-          cat > .cargo/config.toml << 'EOF'
-          [target.x86_64-pc-windows-msvc]
-          linker = "rust-lld"
-          EOF
-
       - name: Install Dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
