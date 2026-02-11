@@ -1,0 +1,215 @@
+name: Build & Publish Debian Packages
+
+on:
+  push:
+    tags:
+      - 'v*'          # Trigger on version tags: v0.1.0, v1.0.0, etc.
+  workflow_dispatch:   # Allow manual trigger
+    inputs:
+      php_versions:
+        description: 'PHP versions (comma-separated)'
+        default: '8.1,8.2,8.3,8.4'
+
+permissions:
+  contents: write      # For creating releases
+  pages: write         # For publishing APT repo to GitHub Pages
+  id-token: write      # For Pages deployment
+
+# ══════════════════════════════════════════════════════════════
+# Strategy: Build a .deb for each PHP version × architecture,
+# then assemble them into an APT repository on GitHub Pages.
+# ══════════════════════════════════════════════════════════════
+
+jobs:
+  # ── Stage 1: Build .deb for each PHP version ──
+  build-deb:
+    name: "PHP ${{ matrix.php }} / ${{ matrix.arch }}"
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # AMD64 builds
+          - { php: "8.1", arch: "amd64", runner: "ubuntu-22.04" }
+          - { php: "8.2", arch: "amd64", runner: "ubuntu-22.04" }
+          - { php: "8.3", arch: "amd64", runner: "ubuntu-22.04" }
+          - { php: "8.4", arch: "amd64", runner: "ubuntu-22.04" }
+          # ARM64 builds (GitHub-hosted ARM runners)
+          - { php: "8.1", arch: "arm64", runner: "ubuntu-22.04-arm" }
+          - { php: "8.2", arch: "arm64", runner: "ubuntu-22.04-arm" }
+          - { php: "8.3", arch: "arm64", runner: "ubuntu-22.04-arm" }
+          - { php: "8.4", arch: "arm64", runner: "ubuntu-22.04-arm" }
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: phpize
+          ini-values: memory_limit=-1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang libclang-dev dpkg-dev
+
+      - name: Build .deb package
+        run: |
+          chmod +x scripts/build-deb.sh
+          ./scripts/build-deb.sh "${{ matrix.php }}" "${{ matrix.arch }}"
+
+      - name: Run tests
+        run: |
+          php -d "extension=$(pwd)/target/release/libjsonq.so" tests/run_tests.php
+
+      - name: Verify .deb package
+        run: |
+          DEB_FILE=$(ls build/out/*.deb | head -1)
+          echo "📦 Package info:"
+          dpkg-deb --info "$DEB_FILE"
+          echo ""
+          echo "📁 Package contents:"
+          dpkg-deb --contents "$DEB_FILE"
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-php${{ matrix.php }}-${{ matrix.arch }}
+          path: build/out/*.deb
+          retention-days: 5
+
+  # ── Stage 2: Run integration tests with the .deb ──
+  test-install:
+    name: "Test install PHP ${{ matrix.php }}"
+    needs: build-deb
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.1", "8.2", "8.3", "8.4"]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP ${{ matrix.php }}
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+
+      - name: Download .deb
+        uses: actions/download-artifact@v4
+        with:
+          name: deb-php${{ matrix.php }}-amd64
+          path: debs/
+
+      - name: Install .deb package
+        run: |
+          sudo dpkg -i debs/*.deb || sudo apt-get install -f -y
+
+      - name: Verify extension loaded
+        run: |
+          php -m | grep -q jsonq
+          php -r "echo 'JsonQ v' . jsonq_version() . ' loaded successfully\n';"
+
+      - name: Run full test suite
+        run: php tests/run_tests.php
+
+  # ── Stage 3: Assemble APT repository + GitHub Release ──
+  publish:
+    name: "Publish APT Repository"
+    needs: test-install
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all .deb artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: deb-*
+
+      - name: Collect all .deb files
+        run: |
+          mkdir -p build/out
+          find artifacts/ -name '*.deb' -exec cp {} build/out/ \;
+          echo "📦 Packages to publish:"
+          ls -lh build/out/
+
+      - name: Import GPG key
+        if: env.GPG_PRIVATE_KEY != ''
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG key imported"
+
+      - name: Build APT repository
+        run: |
+          sudo apt-get install -y dpkg-dev
+          chmod +x scripts/build-repo.sh
+          if gpg --list-keys 2>/dev/null | grep -q "mameyugo"; then
+            GPG_KEY_ID=$(gpg --list-keys --keyid-format long | grep pub | head -1 | awk '{print $2}' | cut -d'/' -f2)
+            ./scripts/build-repo.sh "$GPG_KEY_ID"
+          else
+            ./scripts/build-repo.sh
+          fi
+
+      - name: Generate install instructions
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cat > repo/INSTALL.md << 'EOF'
+          # Installing JsonQ on Debian/Ubuntu
+          
+          ## Quick install (specific .deb)
+          ```bash
+          # Download and install for your PHP version
+          wget https://github.com/mameyugo/JsonQ/releases/download/v${VERSION}/php8.3-jsonq_${VERSION}-1_amd64.deb
+          sudo dpkg -i php8.3-jsonq_${VERSION}-1_amd64.deb
+          sudo apt-get install -f
+          ```
+          
+          ## Via APT repository (recommended)
+          ```bash
+          # Add repository
+          curl -fsSL https://mameyugo.github.io/JsonQ/jsonq-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/jsonq-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/jsonq-archive-keyring.gpg] https://mameyugo.github.io/JsonQ stable main" | sudo tee /etc/apt/sources.list.d/jsonq.list
+          
+          # Install
+          sudo apt-get update
+          sudo apt-get install php8.3-jsonq
+          ```
+          
+          ## Verify
+          ```bash
+          php -m | grep jsonq
+          php -r "echo jsonq_version();"
+          ```
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/out/*.deb
+          generate_release_notes: true
+          body_path: repo/INSTALL.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy APT repo to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./repo
+          destination_dir: .
+          keep_files: false
+          commit_message: "📦 Update APT repository - ${{ github.ref_name }}"
