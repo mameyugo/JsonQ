@@ -661,4 +661,5 @@ pub fn jsonq_version() -> String {
 pub fn get_module(module: ModuleBuilder) -> ModuleBuilder { 
     module
         .function(wrap_function!(jsonq_version))
+        .class::<JsonStore>()
 }
