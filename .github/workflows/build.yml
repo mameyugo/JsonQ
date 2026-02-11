@@ -177,7 +177,7 @@ jobs:
             ## Build from source
 
             ```bash
-            git clone https://github.com/${{ github.repository }}.git
+            git clone https://github.com/mameyugo/JsonQ.git
             cd JsonQ
             cargo build --release
             ```
