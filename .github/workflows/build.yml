@@ -1,25 +1,26 @@
-name: Build JsonQ Extension
+name: Build & Release JsonQ Extension
 
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
-    name: Build on ${{ matrix.os }} for PHP ${{ matrix.php }}
+    name: PHP ${{ matrix.php }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         php: ['8.1', '8.2', '8.3', '8.4']
-        # Note: Windows is excluded due to unresolved linker issues with
-        # ext-php-rs and the PHP devel pack (vs16). The PHP symbols in php8.lib
-        # are not properly resolved by either MSVC link.exe or rust-lld.
-        # See: https://github.com/davidcole1340/ext-php-rs/issues
+        # Windows excluded: ext-php-rs has unresolved linker issues with php8.lib
 
     steps:
       - name: Checkout code
@@ -63,22 +64,120 @@ jobs:
       - name: Build Extension
         run: cargo build --release
 
-      - name: Run Tests
+      - name: Detect platform info
+        id: platform
         run: |
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          # Normalize arch names
+          case "$ARCH" in
+            x86_64)  ARCH="x86_64" ;;
+            aarch64) ARCH="arm64" ;;
+            arm64)   ARCH="arm64" ;;
+          esac
+          echo "os=$OS" >> $GITHUB_OUTPUT
+          echo "arch=$ARCH" >> $GITHUB_OUTPUT
+
+      - name: Prepare release artifact
+        id: artifact
+        run: |
+          VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+          OS="${{ steps.platform.outputs.os }}"
+          ARCH="${{ steps.platform.outputs.arch }}"
+          PHP="${{ matrix.php }}"
+
+          # Determine extension file
           if [ -f target/release/libjsonq.so ]; then
-            EXT=target/release/libjsonq.so
+            SRC="target/release/libjsonq.so"
+            EXT="so"
           elif [ -f target/release/libjsonq.dylib ]; then
-            EXT=target/release/libjsonq.dylib
-          fi
-          if [ -n "$EXT" ]; then
-            php -d "extension=$(pwd)/$EXT" tests/run_tests.php
+            SRC="target/release/libjsonq.dylib"
+            EXT="dylib"
+          else
+            echo "ERROR: No compiled extension found!"
+            find target/release -maxdepth 1 -name "*jsonq*" | head -10
+            exit 1
           fi
 
-      - name: Upload Artifact
+          # Name following convention: jsonq-v{version}-{os}-{arch}-php{version}.{ext}
+          ARTIFACT_NAME="jsonq-v${VERSION}-${OS}-${ARCH}-php${PHP}.${EXT}"
+
+          mkdir -p dist
+          cp "$SRC" "dist/${ARTIFACT_NAME}"
+
+          echo "src=$SRC" >> $GITHUB_OUTPUT
+          echo "artifact_name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+          echo "✅ Artifact: $ARTIFACT_NAME ($(ls -lh dist/$ARTIFACT_NAME | awk '{print $5}'))"
+
+      - name: Run Tests
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/run_tests.php
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jsonq-${{ matrix.os }}-php${{ matrix.php }}
-          path: |
-            target/release/libjsonq.so
-            target/release/libjsonq.dylib
-          if-no-files-found: ignore
+          name: ${{ steps.artifact.outputs.artifact_name }}
+          path: dist/${{ steps.artifact.outputs.artifact_name }}
+          if-no-files-found: error
+
+  # ─── Create GitHub Release on version tags ───
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: false
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          find release-assets -type f \( -name "*.so" -o -name "*.dylib" \) -exec cp {} release/ \;
+          echo "📦 Release files:"
+          ls -lh release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release/*
+          body: |
+            ## Installation
+
+            1. Download the appropriate binary for your platform and PHP version
+            2. Copy to your PHP extensions directory:
+               ```bash
+               # Find your extension directory
+               php -i | grep extension_dir
+
+               # Copy the extension (example for Linux PHP 8.3)
+               sudo cp jsonq-v*-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
+               ```
+            3. Enable the extension in `php.ini`:
+               ```ini
+               extension=jsonq.so
+               ```
+            4. Verify:
+               ```bash
+               php -m | grep jsonq
+               ```
+
+            ## Build from source
+
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            cd JsonQ
+            cargo build --release
+            ```
