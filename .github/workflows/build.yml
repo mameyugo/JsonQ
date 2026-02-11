@@ -14,8 +14,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
         php: ['8.1', '8.2', '8.3', '8.4']
+        # Note: Windows is excluded due to unresolved linker issues with
+        # ext-php-rs and the PHP devel pack (vs16). The PHP symbols in php8.lib
+        # are not properly resolved by either MSVC link.exe or rust-lld.
+        # See: https://github.com/davidcole1340/ext-php-rs/issues
 
     steps:
       - name: Checkout code
@@ -28,13 +32,8 @@ jobs:
           tools: phpize
           ini-values: memory_limit=-1
 
-      - name: Setup Rust (stable)
-        if: runner.os != 'Windows'
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Rust (nightly for Windows)
-        if: runner.os == 'Windows'
-        uses: dtolnay/rust-toolchain@nightly
 
       - name: Install Dependencies (Linux)
         if: runner.os == 'Linux'
@@ -64,8 +63,7 @@ jobs:
       - name: Build Extension
         run: cargo build --release
 
-      - name: Run Tests (Linux & macOS)
-        if: runner.os != 'Windows'
+      - name: Run Tests
         run: |
           if [ -f target/release/libjsonq.so ]; then
             EXT=target/release/libjsonq.so
@@ -83,5 +81,4 @@ jobs:
           path: |
             target/release/libjsonq.so
             target/release/libjsonq.dylib
-            target/release/jsonq.dll
           if-no-files-found: ignore
