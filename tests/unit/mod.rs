@@ -8,3 +8,4 @@ mod store;
 mod path;
 mod utils;
 mod validation;
+mod index;

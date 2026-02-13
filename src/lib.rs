@@ -7,6 +7,7 @@ pub mod store;
 pub mod path;
 pub mod utils;
 pub mod validation;
+pub mod index;
 
 #[cfg(test)]
 pub mod php;
@@ -18,6 +19,7 @@ use store::StoreInner;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
 use utils::{as_u64, value_key, search_in_value, merge_values};
 use validation::validate;
+use index::IndexBuilder;
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::sync::Arc;
