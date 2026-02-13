@@ -26,27 +26,33 @@ cargo build
 cargo build --release
 
 # Run tests
-php -d "extension=$(pwd)/target/release/libjsonq.so" tests/run_tests.php
+php -d "extension=$(pwd)/target/release/libjsonq.so" tests/integration/run_tests.php
 ```
 
 ### Project Structure
 
 ```
 JsonQ/
-├── src/lib.rs          # Complete Rust implementation
-├── Cargo.toml          # Rust dependencies and metadata
-├── stubs/JsonQ.php     # PHP stubs for IDE autocompletion
+├── src/                # Rust core implementation
+│   ├── lib.rs          # Entry point + PHP module registration
+│   ├── conversion/     # PHP ↔ Rust conversion
+│   ├── store/          # Core storage engine
+│   ├── index/          # Indexing system
+│   ├── query/          # Query engine
+│   └── ...             # Other modules
 ├── tests/
-│   └── run_tests.php   # Integration test suite
-├── examples/           # Usage examples
-├── docs/               # Documentation
-└── .github/workflows/  # CI configuration
+│   ├── integration/    # PHP integration tests
+│   └── unit/           # Rust unit tests
+├── benches/            # Performance benchmarks
+├── stubs/JsonQ.php     # PHP stubs for IDE autocompletion
+├── Cargo.toml          # Rust dependencies and metadata
+└── ...
 ```
 
 ## Development Workflow
 
 1. **Fork and branch** — Create a feature branch from `main`
-2. **Make changes** — Edit `src/lib.rs` and add tests
+2. **Make changes** — Edit the relevant module in `src/` and add tests
 3. **Build** — `cargo build --release`
 4. **Test** — Run the full test suite (67+ tests must pass)
 5. **Submit PR** — Open a pull request with a clear description
@@ -70,8 +76,8 @@ JsonQ/
 
 ## Adding a New Feature
 
-1. **Implement in Rust** — Add the logic in `src/lib.rs`
-2. **Expose via PHP** — Add a `#[php_method]` to `JsonStore`
+1. **Implement in Rust** — Add the logic in the appropriate module under `src/`
+2. **Expose via PHP** — Register the method in `src/php/`
 3. **Update stubs** — Add PHPDoc to `stubs/JsonQ.php`
 4. **Add tests** — Cover happy path, edge cases, and error conditions
 5. **Update docs** — Add to README.md and CHANGELOG.md

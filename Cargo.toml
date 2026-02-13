@@ -14,7 +14,7 @@ categories = ["database", "filesystem"]
 rust-version = "1.75"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 name = "jsonq"
 
 [dependencies]

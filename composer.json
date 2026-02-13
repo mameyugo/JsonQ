@@ -23,7 +23,7 @@
     },
     "scripts": {
         "build": "cargo build --release",
-        "test": "php -d extension=$(pwd)/target/release/libjsonq.so tests/run_tests.php",
+        "test": "php -d extension=$(pwd)/target/release/libjsonq.so tests/integration/run_tests.php",
         "bench": "php -d extension=$(pwd)/target/release/libjsonq.so examples/benchmark.php"
     },
     "support": {

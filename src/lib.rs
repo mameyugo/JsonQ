@@ -2,8 +2,11 @@
 #![cfg_attr(windows, feature(abi_vectorcall))]
 #![allow(non_snake_case)]
 
+pub mod conversion;
+
 use ext_php_rs::prelude::*;
-use ext_php_rs::types::{Zval, ArrayKey};
+use ext_php_rs::types::Zval;
+use conversion::{value_to_zval, zval_to_value};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -18,69 +21,6 @@ fn as_u64(v: &Value) -> Option<u64> {
     v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)).or_else(|| v.as_f64().map(|f| f as u64))
 }
 
-// ══════════ ZVAL CONVERSION ══════════
-
-fn value_to_zval(val: &Value) -> Zval {
-    let mut z = Zval::new();
-    match val {
-        Value::Null => { z.set_null(); }
-        Value::Bool(b) => { z.set_bool(*b); }
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() { z.set_long(i); }
-            else { z.set_double(n.as_f64().unwrap_or(0.0)); }
-        }
-        Value::String(s) => { let _ = z.set_string(s, false); }
-        Value::Array(arr) => {
-            let mut ht = ext_php_rs::types::ZendHashTable::new();
-            for item in arr { let _ = ht.push(value_to_zval(item)); }
-            z.set_hashtable(ht);
-        }
-        Value::Object(map) => {
-            let mut ht = ext_php_rs::types::ZendHashTable::new();
-            for (k, v) in map { let _ = ht.insert(k.as_str(), value_to_zval(v)); }
-            z.set_hashtable(ht);
-        }
-    }
-    z
-}
-
-fn zval_to_value(zval: &Zval) -> Value {
-    if zval.is_null() { return Value::Null; }
-    if zval.is_bool() { return Value::Bool(zval.bool().unwrap_or(false)); }
-    if zval.is_long() { return Value::Number(serde_json::Number::from(zval.long().unwrap_or(0))); }
-    if zval.is_double() { return serde_json::Number::from_f64(zval.double().unwrap_or(0.0)).map(Value::Number).unwrap_or(Value::Null); }
-    if zval.is_string() { return Value::String(zval.str().unwrap_or("").to_string()); }
-    if let Some(ht) = zval.array() { return ht_to_value(ht); }
-    Value::Null
-}
-
-fn ht_to_value(ht: &ext_php_rs::types::ZendHashTable) -> Value {
-    let mut is_seq = true;
-    let mut exp: u64 = 0;
-    for (key, _) in ht.iter() {
-        match key {
-            ArrayKey::Long(idx) if idx as u64 == exp => { exp += 1; }
-            ArrayKey::String(_) | ArrayKey::Str(_) => { is_seq = false; break; }
-            _ => { is_seq = false; break; }
-        }
-    }
-    if is_seq && ht.len() > 0 {
-        let mut arr = Vec::with_capacity(ht.len());
-        for (_, val) in ht.iter() { arr.push(zval_to_value(val)); }
-        Value::Array(arr)
-    } else {
-        let mut map = Map::new();
-        for (key, val) in ht.iter() {
-            let k = match key {
-                ArrayKey::String(s) => s.to_string(),
-                ArrayKey::Str(s) => s.to_string(),
-                ArrayKey::Long(idx) => idx.to_string(),
-            };
-            map.insert(k, zval_to_value(val));
-        }
-        Value::Object(map)
-    }
-}
 
 // ══════════ STORE ENGINE ══════════
 

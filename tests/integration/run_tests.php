@@ -3,7 +3,7 @@
  * JsonQ Test Suite
  *
  * Comprehensive integration tests for the JsonQ PHP extension.
- * Run: php -d "extension=path/to/libjsonq.so" tests/run_tests.php
+ * Run: php -d "extension=path/to/libjsonq.so" tests/integration/run_tests.php
  */
 
 $passed = 0;

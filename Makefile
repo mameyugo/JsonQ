@@ -27,7 +27,7 @@ debug: ## Build the extension (debug mode)
 	@echo "\n✅ Built: target/debug/libjsonq.so"
 
 test: build ## Run the test suite
-	php -d "extension=$$(pwd)/$(EXT_FILE)" tests/run_tests.php
+	php -d "extension=$$(pwd)/$(EXT_FILE)" tests/integration/run_tests.php
 
 bench: build ## Run benchmarks
 	php -d "extension=$$(pwd)/$(EXT_FILE)" examples/benchmark.php
