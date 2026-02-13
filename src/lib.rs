@@ -22,7 +22,7 @@ use utils::{value_key, search_in_value, merge_values};
 use validation::validate;
 use index::IndexBuilder;
 use query::{matches, execute_query};
-use serde_json::{Map, Value};
+use serde_json::{Map, Value, json};
 use std::fs;
 use std::sync::Arc;
 

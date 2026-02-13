@@ -1,11 +1,12 @@
 //! Index storage and management
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 /// Storage for collection indexes
 ///
-/// Tracks both single-field and compound indexes with their build times
-#[derive(Debug)]
+/// Tracks both single-field and compound indexes with their built times
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IndexStore {
     /// Single-field indexes: field_name -> {value -> [positions]}
     pub single: HashMap<String, HashMap<String, Vec<usize>>>,
