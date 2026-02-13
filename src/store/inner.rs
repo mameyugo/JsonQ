@@ -257,7 +257,7 @@ impl StoreInner {
         let cd = self.read()?;
         let arr = match crate::path::read_path(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
         let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, item) in arr.iter().enumerate() { idx.entry(crate::vkey(crate::path::read_nested(item, field))).or_default().push(i); }
+        for (i, item) in arr.iter().enumerate() { idx.entry(crate::utils::value_key(crate::path::read_nested(item, field))).or_default().push(i); }
         let mut indexes = self.indexes.write().unwrap();
         let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
         store.single.insert(field.to_string(), idx); store.built_at = mt;
@@ -269,7 +269,7 @@ impl StoreInner {
         let arr = match crate::path::read_path(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
         let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, item) in arr.iter().enumerate() {
-            let k: String = fields.iter().map(|f| crate::vkey(crate::path::read_nested(item, f))).collect::<Vec<_>>().join("|");
+            let k: String = fields.iter().map(|f| crate::utils::value_key(crate::path::read_nested(item, f))).collect::<Vec<_>>().join("|");
             idx.entry(k).or_default().push(i);
         }
         let mut indexes = self.indexes.write().unwrap();
@@ -283,7 +283,7 @@ impl StoreInner {
         let indexes = self.indexes.read().unwrap();
         let store = indexes.get(coll)?;
         if store.built_at < mt { return None; }
-        store.single.get(field)?.get(&crate::vkey(Some(value))).cloned()
+        store.single.get(field)?.get(&crate::utils::value_key(Some(value))).cloned()
     }
 }
 

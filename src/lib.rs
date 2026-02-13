@@ -5,6 +5,7 @@
 pub mod conversion;
 pub mod store;
 pub mod path;
+pub mod utils;
 
 #[cfg(test)]
 pub mod php;
@@ -14,34 +15,15 @@ use ext_php_rs::types::Zval;
 use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
+use utils::{as_u64, value_key, search_in_value, merge_values};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::sync::Arc;
 
 // ══════════ HELPERS ══════════
 
-fn as_u64(v: &Value) -> Option<u64> {
-    v.as_u64().or_else(|| v.as_i64().map(|i| i as u64)).or_else(|| v.as_f64().map(|f| f as u64))
-}
-
-
-// ══════════ STORE ENGINE ══════════
-
-// Store engine components moved to mod store
-
-// ══════════ HELPERS ══════════
-
-// Helper vkey remains temporarily until utils module is created
-pub(crate) fn vkey(v: Option<&Value>) -> String { v.map(|x| match x { Value::String(s) => s.clone(), _ => x.to_string() }).unwrap_or_else(|| "null".into()) }
-
-fn search_in_value(v: &Value, kw: &str) -> bool {
-    match v {
-        Value::String(s) => s.to_lowercase().contains(kw),
-        Value::Object(m) => m.values().any(|x| search_in_value(x, kw)),
-        Value::Array(a) => a.iter().any(|x| search_in_value(x, kw)),
-        _ => v.to_string().to_lowercase().contains(kw),
-    }
-}
+// Helper vkey remains temporarily until items that still use it are refactored
+pub(crate) fn vkey(v: Option<&Value>) -> String { value_key(v) }
 
 fn mat(item: &Value, cond: &Value) -> bool {
     let co = match cond.as_object() { Some(o) => o, None => return false };
@@ -77,13 +59,7 @@ fn mat(item: &Value, cond: &Value) -> bool {
     })
 }
 
-fn merge_v(v: &mut Value, n: &Value) {
-    match (v, n) {
-        (Value::Object(a), Value::Object(b)) => { for (k, v) in b { merge_v(a.entry(k.clone()).or_insert(Value::Null), v); } }
-        (Value::Array(a), Value::Array(b)) => { a.extend(b.clone()); }
-        (a, b) => { *a = b.clone(); }
-    }
-}
+
 
 fn exec_fluent(arr: &Vec<Value>, q: &Value) -> Vec<Value> {
     let mut res = arr.clone();
@@ -320,7 +296,7 @@ impl JsonStore {
     pub fn set(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| write_path(d, &path, v)).is_ok() }
     pub fn remove(&self, path: String) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { remove_path(d, &path); }).is_ok() }
     pub fn push(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match read_path_mut(d, &path) { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
-    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = read_path_mut(d, &path) { merge_v(e, &nv); } else { write_path(d, &path, nv); } }).is_ok() }
+    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = read_path_mut(d, &path) { merge_values(e, &nv); } else { write_path(d, &path, nv); } }).is_ok() }
     pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = read_path_mut(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
     pub fn decrement(&self, path: String, amount: Option<f64>) -> bool { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
 
