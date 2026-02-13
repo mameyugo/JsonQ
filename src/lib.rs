@@ -3,17 +3,15 @@
 #![allow(non_snake_case)]
 
 pub mod conversion;
+pub mod store;
 
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
 use conversion::{value_to_zval, zval_to_value};
+use store::StoreInner;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Write;
-use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
-use memmap2::Mmap;
+use std::fs;
+use std::sync::Arc;
 
 // ══════════ HELPERS ══════════
 
@@ -24,132 +22,7 @@ fn as_u64(v: &Value) -> Option<u64> {
 
 // ══════════ STORE ENGINE ══════════
 
-struct StoreOpts { pretty: bool, fsync: bool }
-impl Default for StoreOpts { fn default() -> Self { Self { pretty: false, fsync: false } } }
-
-struct IndexStore {
-    single: HashMap<String, HashMap<String, Vec<usize>>>,
-    compound: HashMap<Vec<String>, HashMap<String, Vec<usize>>>,
-    built_at: u64,
-}
-impl IndexStore { fn new() -> Self { Self { single: HashMap::new(), compound: HashMap::new(), built_at: 0 } } }
-
-struct CachedData { data: Arc<Value>, mtime: u64 }
-
-struct StoreInner {
-    path: PathBuf,
-    cache: RwLock<Option<CachedData>>,
-    indexes: RwLock<HashMap<String, IndexStore>>,
-    opts: RwLock<StoreOpts>,
-    in_transaction: RwLock<bool>,
-    tx_data: RwLock<Option<Arc<Value>>>,
-}
-
-impl StoreInner {
-    fn new(path: String) -> Self {
-        let p = PathBuf::from(&path);
-        if let Some(parent) = p.parent() { let _ = fs::create_dir_all(parent); }
-        if !p.exists() { let _ = fs::write(&p, "{}"); }
-        Self {
-            path: p,
-            cache: RwLock::new(None),
-            indexes: RwLock::new(HashMap::new()),
-            opts: RwLock::new(StoreOpts::default()),
-            in_transaction: RwLock::new(false),
-            tx_data: RwLock::new(None),
-        }
-    }
-
-    fn mtime(&self) -> u64 {
-        fs::metadata(&self.path).and_then(|m| m.modified())
-            .map(|t| t.duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()).unwrap_or(0)
-    }
-
-    fn read(&self) -> Result<Arc<Value>, String> {
-        if *self.in_transaction.read().unwrap() {
-            if let Some(ref d) = *self.tx_data.read().unwrap() {
-                return Ok(d.clone());
-            }
-        }
-        let mt = self.mtime();
-        {
-            let cache = self.cache.read().unwrap();
-            if let Some(ref c) = *cache { if c.mtime == mt { return Ok(c.data.clone()); } }
-        }
-
-        let file = File::open(&self.path).map_err(|e| e.to_string())?;
-        let mmap = unsafe { Mmap::map(&file).map_err(|e| e.to_string())? };
-        let data: Value = serde_json::from_slice(&mmap).map_err(|e| e.to_string())?;
-        let arc_data = Arc::new(data);
-        *self.cache.write().unwrap() = Some(CachedData { data: arc_data.clone(), mtime: mt });
-        Ok(arc_data)
-    }
-
-    fn write(&self, data: &Value) -> Result<(), String> {
-        if *self.in_transaction.read().unwrap() {
-            *self.tx_data.write().unwrap() = Some(Arc::new(data.clone()));
-            return Ok(());
-        }
-        self.flush(data)
-    }
-
-    fn flush(&self, data: &Value) -> Result<(), String> {
-        let opts = self.opts.read().unwrap();
-        let s = if opts.pretty { serde_json::to_string_pretty(data) } else { serde_json::to_string(data) }.map_err(|e| e.to_string())?;
-
-        let tmp_path = self.path.with_extension("tmp");
-        {
-            let mut f = File::create(&tmp_path).map_err(|e| e.to_string())?;
-            f.write_all(s.as_bytes()).map_err(|e| e.to_string())?;
-            if opts.fsync { f.sync_all().map_err(|e| e.to_string())?; }
-        }
-        fs::rename(&tmp_path, &self.path).map_err(|e| e.to_string())?;
-
-        *self.cache.write().unwrap() = Some(CachedData { data: Arc::new(data.clone()), mtime: self.mtime() });
-        Ok(())
-    }
-
-    fn mutate<F>(&self, f: F) -> Result<(), String> where F: FnOnce(&mut Value) {
-        let arc_data = self.read()?;
-        let mut data = (*arc_data).clone();
-        f(&mut data);
-        self.write(&data)
-    }
-
-    fn build_index(&self, coll: &str, field: &str) -> Result<(), String> {
-        let mt = self.mtime();
-        let cd = self.read()?;
-        let arr = match rp(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
-        let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, item) in arr.iter().enumerate() { idx.entry(vkey(rn(item, field))).or_default().push(i); }
-        let mut indexes = self.indexes.write().unwrap();
-        let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
-        store.single.insert(field.to_string(), idx); store.built_at = mt;
-        Ok(())
-    }
-
-    fn build_compound(&self, coll: &str, fields: &[String]) -> Result<(), String> {
-        let cd = self.read()?;
-        let arr = match rp(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
-        let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, item) in arr.iter().enumerate() {
-            let k: String = fields.iter().map(|f| vkey(rn(item, f))).collect::<Vec<_>>().join("|");
-            idx.entry(k).or_default().push(i);
-        }
-        let mut indexes = self.indexes.write().unwrap();
-        let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
-        store.compound.insert(fields.to_vec(), idx); store.built_at = self.mtime();
-        Ok(())
-    }
-
-    fn idx_lookup(&self, coll: &str, field: &str, value: &Value) -> Option<Vec<usize>> {
-        let mt = self.mtime();
-        let indexes = self.indexes.read().unwrap();
-        let store = indexes.get(coll)?;
-        if store.built_at < mt { return None; }
-        store.single.get(field)?.get(&vkey(Some(value))).cloned()
-    }
-}
+// Store engine components moved to mod store
 
 // ══════════ HELPERS ══════════
 
@@ -389,19 +262,19 @@ impl JsonStore {
 
     #[php(name = "setOption")]
     pub fn set_option(&self, key: String, value: &Zval) -> bool {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return false };
-        let mut opts = i.opts.write().unwrap();
+        let i = match &self.inner { Some(i) => i, None => return false };
+        let mut opts = i.get_opts();
         match key.as_str() {
-            "pretty" | "pretty_print" => { opts.pretty = value.bool().unwrap_or(false); true }
-            "fsync" | "sync" => { opts.fsync = value.bool().unwrap_or(false); true }
+            "pretty" | "pretty_print" => { opts.pretty = value.bool().unwrap_or(false); i.set_opts(opts); true }
+            "fsync" | "sync" => { opts.fsync = value.bool().unwrap_or(false); i.set_opts(opts); true }
             _ => false,
         }
     }
     
     #[php(name = "getOption")]
     pub fn get_option(&self, key: String) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
-        let opts = i.opts.read().unwrap();
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() };
+        let opts = i.get_opts();
         let mut z = Zval::new();
         match key.as_str() { "pretty"|"pretty_print" => { z.set_bool(opts.pretty); } "fsync"|"sync" => { z.set_bool(opts.fsync); } _ => {} }
         z
@@ -409,31 +282,25 @@ impl JsonStore {
 
     #[php(name = "beginTransaction")]
     pub fn begin_transaction(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        let data = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
-        *i.tx_data.write().unwrap() = Some(data);
-        *i.in_transaction.write().unwrap() = true;
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        i.begin_transaction().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
         Ok(true)
     }
     
     pub fn commit(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        let data = i.tx_data.read().unwrap().clone().ok_or("No active transaction")?;
-        *i.in_transaction.write().unwrap() = false;
-        *i.tx_data.write().unwrap() = None;
-        i.flush(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        i.commit().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
         Ok(true)
     }
     
     pub fn rollback(&self) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        *i.in_transaction.write().unwrap() = false;
-        *i.tx_data.write().unwrap() = None;
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        i.rollback().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
         Ok(true)
     }
     
     #[php(name = "inTransaction")]
-    pub fn in_transaction(&self) -> bool { self.inner.as_ref().map(|i: &StoreInner| *i.in_transaction.read().unwrap()).unwrap_or(false) }
+    pub fn in_transaction(&self) -> bool { self.inner.as_ref().map(|i| i.in_transaction()).unwrap_or(false) }
 
     #[php(name = "setMany")]
     pub fn set_many(&self, pairs: &Zval) -> PhpResult<i64> {
@@ -505,7 +372,7 @@ impl JsonStore {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
         i.read().map(|cd: Arc<Value>| {
             let arr = match rp(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
-            if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<Value>>())); } } } } }
+            if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<_>>())); } } } } }
             value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
         }).unwrap_or_else(|_| Zval::new())
     }
@@ -568,7 +435,8 @@ impl JsonStore {
     pub fn drop_all_indexes(&self) -> i64 { self.inner.as_ref().map(|i: &StoreInner| { let mut idx = i.indexes.write().unwrap(); let c = idx.len() as i64; idx.clear(); c }).unwrap_or(0) }
 
     pub fn stats(&self) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let meta = match fs::metadata(&i.path) { Ok(m) => m, Err(_) => return Zval::new() };
+        let i = match &self.inner { Some(i) => i, None => return Zval::new() };
+        let meta = match fs::metadata(&i.path) { Ok(m) => m, Err(_) => return Zval::new() };
         i.read().map(|cd: Arc<Value>| {
             let fs = meta.len(); let fsh = if fs<1024{format!("{} B",fs)}else if fs<1048576{format!("{:.2} KB",fs as f64/1024.0)}else{format!("{:.2} MB",fs as f64/1048576.0)};
             let keys: Vec<Value> = if let Value::Object(o) = cd.as_ref() { o.keys().map(|k| Value::String(k.clone())).collect() } else { vec![] };
@@ -579,14 +447,14 @@ impl JsonStore {
     }
     
     pub fn backup(&self, backup_path: Option<String>) -> PhpResult<String> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         let t = match backup_path { Some(p) if !p.is_empty() => p, _ => format!("{}.backup.{}",i.path.to_string_lossy(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()) };
         fs::copy(&i.path, &t).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         Ok(t)
     }
     
     pub fn restore(&self, backup_path: String) -> PhpResult<bool> {
-        let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let i = self.inner.as_ref().ok_or("Not init")?;
         fs::copy(&backup_path, &i.path).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear();
         Ok(true)

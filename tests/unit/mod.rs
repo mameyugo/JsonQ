@@ -4,3 +4,4 @@
 //! Integration tests with PHP runtime are in tests/*.php
 
 mod conversion;
+mod store;
