@@ -255,9 +255,9 @@ impl StoreInner {
     pub fn build_index(&self, coll: &str, field: &str) -> Result<(), String> {
         let mt = self.mtime();
         let cd = self.read()?;
-        let arr = match rp(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
+        let arr = match crate::path::read_path(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
         let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
-        for (i, item) in arr.iter().enumerate() { idx.entry(vkey(rn(item, field))).or_default().push(i); }
+        for (i, item) in arr.iter().enumerate() { idx.entry(crate::vkey(crate::path::read_nested(item, field))).or_default().push(i); }
         let mut indexes = self.indexes.write().unwrap();
         let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
         store.single.insert(field.to_string(), idx); store.built_at = mt;
@@ -266,10 +266,10 @@ impl StoreInner {
     
     pub fn build_compound(&self, coll: &str, fields: &[String]) -> Result<(), String> {
         let cd = self.read()?;
-        let arr = match rp(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
+        let arr = match crate::path::read_path(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
         let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, item) in arr.iter().enumerate() {
-            let k: String = fields.iter().map(|f| vkey(rn(item, f))).collect::<Vec<_>>().join("|");
+            let k: String = fields.iter().map(|f| crate::vkey(crate::path::read_nested(item, f))).collect::<Vec<_>>().join("|");
             idx.entry(k).or_default().push(i);
         }
         let mut indexes = self.indexes.write().unwrap();
@@ -283,18 +283,8 @@ impl StoreInner {
         let indexes = self.indexes.read().unwrap();
         let store = indexes.get(coll)?;
         if store.built_at < mt { return None; }
-        store.single.get(field)?.get(&vkey(Some(value))).cloned()
+        store.single.get(field)?.get(&crate::vkey(Some(value))).cloned()
     }
 }
 
-// ══════════ PRIVATE HELPERS (TEMPORAL) ══════════
-
-fn rp<'a>(root: &'a Value, dp: &str) -> Option<&'a Value> {
-    if dp.is_empty() { return Some(root); }
-    let mut c = root;
-    for k in dp.split('.') { c = match c { Value::Object(m) => m.get(k)?, Value::Array(a) => a.get(k.parse::<usize>().ok()?)?, _ => return None }; }
-    Some(c)
-}
-
-fn rn<'a>(v: &'a Value, path: &str) -> Option<&'a Value> { path.split('.').fold(Some(v), |acc, k| match acc { Some(Value::Object(m)) => m.get(k), Some(Value::Array(a)) => a.get(k.parse::<usize>().ok()?), _ => None }) }
-fn vkey(v: Option<&Value>) -> String { v.map(|x| match x { Value::String(s) => s.clone(), _ => x.to_string() }).unwrap_or_else(|| "null".into()) }
+// Store engine components moved to mod store

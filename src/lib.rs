@@ -4,11 +4,13 @@
 
 pub mod conversion;
 pub mod store;
+pub mod path;
 
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
 use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
+use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::sync::Arc;
@@ -26,57 +28,8 @@ fn as_u64(v: &Value) -> Option<u64> {
 
 // ══════════ HELPERS ══════════
 
-fn sap(root: &mut Value, dp: &str, value: Value) {
-    let keys: Vec<&str> = dp.split('.').collect();
-    let mut c = root;
-    for (i, &k) in keys.iter().enumerate() {
-        if i == keys.len() - 1 {
-            match c {
-                Value::Object(m) => { m.insert(k.to_string(), value); }
-                Value::Array(a) => { if let Ok(idx) = k.parse::<usize>() { if idx < a.len() { a[idx] = value; } else { a.push(value); } } }
-                _ => {}
-            }
-            return;
-        }
-        let nn = keys.get(i+1).map(|x| x.parse::<usize>().is_ok()).unwrap_or(false);
-        match c {
-            Value::Object(m) => { if !m.contains_key(k) { m.insert(k.to_string(), if nn { Value::Array(vec![]) } else { Value::Object(Map::new()) }); } c = m.get_mut(k).unwrap(); }
-            Value::Array(a) => { if let Ok(idx) = k.parse::<usize>() { while a.len() <= idx { a.push(Value::Object(Map::new())); } c = &mut a[idx]; } else { return; } }
-            _ => return,
-        }
-    }
-}
-
-fn rp<'a>(root: &'a Value, dp: &str) -> Option<&'a Value> {
-    if dp.is_empty() { return Some(root); }
-    let mut c = root;
-    for k in dp.split('.') { c = match c { Value::Object(m) => m.get(k)?, Value::Array(a) => a.get(k.parse::<usize>().ok()?)?, _ => return None }; }
-    Some(c)
-}
-
-fn rpm<'a>(root: &'a mut Value, dp: &str) -> Option<&'a mut Value> {
-    if dp.is_empty() { return Some(root); }
-    let mut c = root;
-    for k in dp.split('.') { c = match c { Value::Object(m) => m.get_mut(k)?, Value::Array(a) => a.get_mut(k.parse::<usize>().ok()?)?, _ => return None }; }
-    Some(c)
-}
-
-fn rap(root: &mut Value, dp: &str) -> bool {
-    let mut keys: Vec<&str> = dp.split('.').collect();
-    if keys.is_empty() { return false; }
-    let k = keys.pop().unwrap();
-    let p = keys.join(".");
-    if let Some(target) = if p.is_empty() { Some(root) } else { rpm(root, &p) } {
-        match target {
-            Value::Object(m) => m.remove(k).is_some(),
-            Value::Array(a) => { if let Ok(idx) = k.parse::<usize>() { if idx < a.len() { a.remove(idx); return true; } } false }
-            _ => false,
-        }
-    } else { false }
-}
-
-fn rn<'a>(v: &'a Value, path: &str) -> Option<&'a Value> { path.split('.').fold(Some(v), |acc, k| match acc { Some(Value::Object(m)) => m.get(k), Some(Value::Array(a)) => a.get(k.parse::<usize>().ok()?), _ => None }) }
-fn vkey(v: Option<&Value>) -> String { v.map(|x| match x { Value::String(s) => s.clone(), _ => x.to_string() }).unwrap_or_else(|| "null".into()) }
+// Helper vkey remains temporarily until utils module is created
+pub(crate) fn vkey(v: Option<&Value>) -> String { v.map(|x| match x { Value::String(s) => s.clone(), _ => x.to_string() }).unwrap_or_else(|| "null".into()) }
 
 fn search_in_value(v: &Value, kw: &str) -> bool {
     match v {
@@ -99,7 +52,7 @@ fn mat(item: &Value, cond: &Value) -> bool {
                 _ => false
             }
         } else {
-            let iv = rn(item, k);
+            let iv = read_nested(item, k);
             if let Some(vo) = v.as_object() {
                 vo.iter().all(|(op, ov)| match op.as_str() {
                     "$eq" => iv == Some(ov), "$ne" => iv != Some(ov),
@@ -137,7 +90,7 @@ fn exec_fluent(arr: &Vec<Value>, q: &Value) -> Vec<Value> {
                 let f = cond.get("field").and_then(|x| x.as_str()).unwrap_or("");
                 let op = cond.get("op").and_then(|x| x.as_str()).unwrap_or("=");
                 let v = cond.get("value").unwrap_or(&Value::Null);
-                let iv = rn(item, f);
+                let iv = read_nested(item, f);
                 match op {
                     "=" | "eq" => iv == Some(v),
                     "!=" | "ne" => iv != Some(v),
@@ -170,7 +123,7 @@ fn exec_fluent(arr: &Vec<Value>, q: &Value) -> Vec<Value> {
         let dir = o.get("direction").and_then(|x| x.as_str()).unwrap_or("asc");
         let desc = dir == "desc" || o.get("desc").and_then(|x| x.as_bool()).unwrap_or(false);
         res.sort_by(|a, b| {
-            let va = rn(a, f); let vb = rn(b, f);
+            let va = read_nested(a, f); let vb = read_nested(b, f);
             let cmp = match (va, vb) {
                 (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64().partial_cmp(&y.as_f64()).unwrap_or(std::cmp::Ordering::Equal),
                 (Some(Value::String(x)), Some(Value::String(y))) => x.cmp(y),
@@ -189,7 +142,7 @@ fn exec_fluent(arr: &Vec<Value>, q: &Value) -> Vec<Value> {
 }
 
 fn agg(arr: &Vec<Value>, field: &str, op: &str) -> Value {
-    let nums: Vec<f64> = arr.iter().filter_map(|i| rn(i, field).and_then(|v| v.as_f64())).collect();
+    let nums: Vec<f64> = arr.iter().filter_map(|i| read_nested(i, field).and_then(|v| v.as_f64())).collect();
     if nums.is_empty() { return Value::Null; }
     match op {
         "sum" => json!(nums.iter().sum::<f64>()), "avg" => json!(nums.iter().sum::<f64>() / nums.len() as f64),
@@ -200,18 +153,18 @@ fn agg(arr: &Vec<Value>, field: &str, op: &str) -> Value {
 
 fn grp(arr: &Vec<Value>, field: &str) -> Value {
     let mut m = Map::new();
-    for i in arr { let k = vkey(rn(i, field)); m.entry(k).or_insert(Value::Array(vec![])).as_array_mut().unwrap().push(i.clone()); }
+    for i in arr { let k = vkey(read_nested(i, field)); m.entry(k).or_insert(Value::Array(vec![])).as_array_mut().unwrap().push(i.clone()); }
     Value::Object(m)
 }
 
 fn plk(arr: &Vec<Value>, fields: &[&str]) -> Vec<Value> {
     if fields.len() == 1 {
         let f = fields[0];
-        return arr.iter().map(|i| rn(i, f).cloned().unwrap_or(Value::Null)).collect();
+        return arr.iter().map(|i| read_nested(i, f).cloned().unwrap_or(Value::Null)).collect();
     }
     arr.iter().map(|i| {
         let mut o = Map::new();
-        for &f in fields { if let Some(v) = rn(i, f) { o.insert(f.to_string(), v.clone()); } }
+        for &f in fields { if let Some(v) = read_nested(i, f) { o.insert(f.to_string(), v.clone()); } }
         Value::Object(o)
     }).collect()
 }
@@ -310,7 +263,7 @@ impl JsonStore {
         let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
-        for (path, value) in po { sap(&mut data, path, value.clone()); count += 1; }
+        for (path, value) in po { write_path(&mut data, path, value.clone()); count += 1; }
         i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         Ok(count)
     }
@@ -321,7 +274,7 @@ impl JsonStore {
         let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
-        for path in &paths { if rap(&mut data, path) { count += 1; } }
+        for path in &paths { if remove_path(&mut data, path) { count += 1; } }
         i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
         Ok(count)
     }
@@ -350,53 +303,53 @@ impl JsonStore {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
         let kw = keyword.to_lowercase();
         i.read().map(|cd: Arc<Value>| {
-            let arr = match rp(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
+            let arr = match read_path(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
             let matched: Vec<Value> = arr.iter().filter(|item| search_in_value(item, &kw)).cloned().collect();
             value_to_zval(&Value::Array(matched))
         }).unwrap_or_else(|_| Zval::new())
     }
 
-    pub fn get(&self, path: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| rp(&cd, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new)).unwrap_or_else(|_| Zval::new()) }
-    pub fn has(&self, path: String) -> bool { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| rp(&cd, &path).is_some()).ok()).unwrap_or(false) }
-    pub fn count(&self, path: String) -> i64 { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match rp(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) }
-    pub fn keys(&self, path: String) -> Vec<String> { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match if path.is_empty(){Some(cd.as_ref())}else{rp(&cd,&path)} { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() }
+    pub fn get(&self, path: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| read_path(&cd, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new)).unwrap_or_else(|_| Zval::new()) }
+    pub fn has(&self, path: String) -> bool { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| read_path(&cd, &path).is_some()).ok()).unwrap_or(false) }
+    pub fn count(&self, path: String) -> i64 { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) }
+    pub fn keys(&self, path: String) -> Vec<String> { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() }
 
-    pub fn set(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| sap(d, &path, v)).is_ok() }
-    pub fn remove(&self, path: String) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { rap(d, &path); }).is_ok() }
-    pub fn push(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match if path.is_empty(){Some(d)}else{rpm(d, &path)} { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
-    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = if path.is_empty(){Some(&mut *d)}else{rpm(d,&path)} { merge_v(e, &nv); } else { sap(d, &path, nv); } }).is_ok() }
-    pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = rpm(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
+    pub fn set(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| write_path(d, &path, v)).is_ok() }
+    pub fn remove(&self, path: String) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { remove_path(d, &path); }).is_ok() }
+    pub fn push(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match read_path_mut(d, &path) { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
+    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = read_path_mut(d, &path) { merge_v(e, &nv); } else { write_path(d, &path, nv); } }).is_ok() }
+    pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = read_path_mut(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
     pub fn decrement(&self, path: String, amount: Option<f64>) -> bool { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
 
     pub fn find(&self, collection: String, conditions: &Zval) -> Zval {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
         i.read().map(|cd: Arc<Value>| {
-            let arr = match rp(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
+            let arr = match read_path(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
             if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<_>>())); } } } } }
             value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
         }).unwrap_or_else(|_| Zval::new())
     }
     
     #[php(name = "findOne")]
-    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| mat(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| mat(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "executeQuery")]
-    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(exec_fluent(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(exec_fluent(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
 
-    pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&agg(a, &field, &operation)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&agg(a, &field, &operation)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "groupBy")]
-    pub fn group_by(&self, collection: String, field: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&grp(a, &field)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn group_by(&self, collection: String, field: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&grp(a, &field)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
-    pub fn pluck(&self, collection: String, fields: Vec<String>) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let fr: Vec<&str> = fields.iter().map(|s| s.as_str()).collect(); i.read().map(|cd: Arc<Value>| match rp(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(plk(a, &fr))), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn pluck(&self, collection: String, fields: Vec<String>) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let fr: Vec<&str> = fields.iter().map(|s| s.as_str()).collect(); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(plk(a, &fr))), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
 
-    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = if path.is_empty(){cd.as_ref()}else{match rp(&cd,&path){Some(v)=>v,None=>return Zval::new()}}; let e = vld(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = match read_path(&cd,&path){Some(v)=>v,None=>return Zval::new()}; let e = vld(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "validateCollection")]
     pub fn validate_collection(&self, path: String, item_schema: &Zval) -> Zval {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(item_schema);
         i.read().map(|cd: Arc<Value>| {
-            let arr = match rp(&cd, &path) { Some(Value::Array(a)) => a, _ => return Zval::new() };
+            let arr = match read_path(&cd, &path) { Some(Value::Array(a)) => a, _ => return Zval::new() };
             let mut ae = Vec::new(); let mut inv = 0usize;
             for (j, item) in arr.iter().enumerate() { let e = vld(item, &sv, &format!("{}.{}",path,j)); if !e.is_empty() { inv += 1; ae.push(json!({"index":j,"errors":e})); } }
             value_to_zval(&json!({"valid":ae.is_empty(),"total_items":arr.len(),"valid_items":arr.len()-inv,"invalid_items":inv,"details":ae}))
@@ -413,7 +366,7 @@ impl JsonStore {
     pub fn index_lookup(&self, collection: String, field: String, value: &Zval) -> Zval {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let v = zval_to_value(value);
         if let Some(pos) = i.idx_lookup(&collection, &field, &v) {
-            i.read().map(|cd: Arc<Value>| if let Some(Value::Array(a)) = rp(&cd, &collection) { value_to_zval(&Value::Array(pos.iter().filter_map(|&j| a.get(j).cloned()).collect::<Vec<Value>>())) } else { Zval::new() }).unwrap_or_else(|_| Zval::new())
+            i.read().map(|cd: Arc<Value>| if let Some(Value::Array(a)) = read_path(&cd, &collection) { value_to_zval(&Value::Array(pos.iter().filter_map(|&j| a.get(j).cloned()).collect::<Vec<_>>())) } else { Zval::new() }).unwrap_or_else(|_| Zval::new())
         } else { Zval::new() }
     }
     
