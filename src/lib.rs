@@ -6,6 +6,9 @@ pub mod conversion;
 pub mod store;
 pub mod path;
 
+#[cfg(test)]
+pub mod php;
+
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
 use conversion::{value_to_zval, zval_to_value};
