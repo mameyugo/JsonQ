@@ -6,6 +6,7 @@ pub mod conversion;
 pub mod store;
 pub mod path;
 pub mod utils;
+pub mod validation;
 
 #[cfg(test)]
 pub mod php;
@@ -16,6 +17,7 @@ use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
 use utils::{as_u64, value_key, search_in_value, merge_values};
+use validation::validate;
 use serde_json::{json, Map, Value};
 use std::fs;
 use std::sync::Arc;
@@ -148,39 +150,7 @@ fn plk(arr: &Vec<Value>, fields: &[&str]) -> Vec<Value> {
     }).collect()
 }
 
-fn vld(v: &Value, s: &Value, p: &str) -> Vec<Value> {
-    let mut e = Vec::new();
-    if let Some(so) = s.as_object() {
-        if let Some(t) = so.get("type").and_then(|x| x.as_str()) {
-            let ok = match t {
-                "string" => v.is_string(),
-                "number" => v.is_number(),
-                "integer" => v.is_number() && (v.as_f64().unwrap_or(0.1) % 1.0 == 0.0),
-                "boolean" => v.is_boolean(),
-                "array" => v.is_array(),
-                "object" => v.is_object(),
-                "null" => v.is_null(),
-                _ => true
-            };
-            if !ok { e.push(json!({"path":p,"error":format!("Expected {}, found {:?}",t,v)})); }
-        }
-        if let Some(min) = so.get("min").or(so.get("minimum")).and_then(|x| x.as_f64()) { if v.as_f64().map_or(false, |val| val < min) { e.push(json!({"path":p,"error":format!("Value {} < minimum {}", v, min)})); } }
-        if let Some(max) = so.get("max").or(so.get("maximum")).and_then(|x| x.as_f64()) { if v.as_f64().map_or(false, |val| val > max) { e.push(json!({"path":p,"error":format!("Value {} > maximum {}", v, max)})); } }
-        if let Some(ml) = so.get("minLength").and_then(as_u64) { if v.as_str().map_or(false, |s| (s.len() as u64) < ml) { e.push(json!({"path":p,"error":format!("String length < {}", ml)})); } }
-        if let Some(ml) = so.get("maxLength").and_then(as_u64) { if v.as_str().map_or(false, |s| (s.len() as u64) > ml) { e.push(json!({"path":p,"error":format!("String length > {}", ml)})); } }
-        if let Some(pat) = so.get("pattern").and_then(|x| x.as_str()) { if v.as_str().map_or(false, |s| !s.contains(pat)) { e.push(json!({"path":p,"error":format!("Value '{}' does not match pattern '{}'", v, pat)})); } }
-        if let Some(fmt) = so.get("format").and_then(|x| x.as_str()) {
-            if fmt == "email" && v.as_str().map_or(false, |s| !s.contains('@') || !s.contains('.')) {
-                e.push(json!({"path":p,"error":"Invalid email format"}));
-            }
-        }
-        if let Some(Value::Array(choices)) = so.get("enum") { if !choices.contains(v) { e.push(json!({"path":p,"error":format!("Value {:?} not in enum {:?}", v, choices)})); } }
-        if let Some(Value::Array(req)) = so.get("required") { if let Value::Object(vo) = v { for r in req { if let Some(rk) = r.as_str() { if !vo.contains_key(rk) { e.push(json!({"path":format!("{}.{}",p,rk),"error":"Required field missing"})); } } } } }
-        if let Some(Value::Object(props)) = so.get("properties") { if let Value::Object(vo) = v { for (pk, pv) in props { e.extend(vld(vo.get(pk).unwrap_or(&Value::Null), pv, &format!("{}.{}",p,pk))); } } }
-        if let Some(items_val) = so.get("items") { if let Value::Array(va) = v { for (j, vi) in va.iter().enumerate() { e.extend(vld(vi, items_val, &format!("{}.{}",p,j))); } } }
-    }
-    e
-}
+
 
 // ══════════ PHP CLASS ══════════
 
@@ -322,7 +292,7 @@ impl JsonStore {
     
     pub fn pluck(&self, collection: String, fields: Vec<String>) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let fr: Vec<&str> = fields.iter().map(|s| s.as_str()).collect(); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(plk(a, &fr))), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
 
-    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = match read_path(&cd,&path){Some(v)=>v,None=>return Zval::new()}; let e = vld(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn validate(&self, path: String, schema: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let sv = zval_to_value(schema); i.read().map(|cd: Arc<Value>| { let t = match read_path(&cd,&path){Some(v)=>v,None=>return Zval::new()}; let e = validate(t, &sv, &path); value_to_zval(&json!({"valid":e.is_empty(),"error_count":e.len(),"errors":e})) }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "validateCollection")]
     pub fn validate_collection(&self, path: String, item_schema: &Zval) -> Zval {
@@ -330,7 +300,7 @@ impl JsonStore {
         i.read().map(|cd: Arc<Value>| {
             let arr = match read_path(&cd, &path) { Some(Value::Array(a)) => a, _ => return Zval::new() };
             let mut ae = Vec::new(); let mut inv = 0usize;
-            for (j, item) in arr.iter().enumerate() { let e = vld(item, &sv, &format!("{}.{}",path,j)); if !e.is_empty() { inv += 1; ae.push(json!({"index":j,"errors":e})); } }
+            for (j, item) in arr.iter().enumerate() { let e = validate(item, &sv, &format!("{}.{}",path,j)); if !e.is_empty() { inv += 1; ae.push(json!({"index":j,"errors":e})); } }
             value_to_zval(&json!({"valid":ae.is_empty(),"total_items":arr.len(),"valid_items":arr.len()-inv,"invalid_items":inv,"details":ae}))
         }).unwrap_or_else(|_| Zval::new())
     }
