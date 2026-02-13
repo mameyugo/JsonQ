@@ -8,6 +8,7 @@ pub mod path;
 pub mod utils;
 pub mod validation;
 pub mod index;
+pub mod query;
 
 #[cfg(test)]
 pub mod php;
@@ -17,10 +18,11 @@ use ext_php_rs::types::Zval;
 use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
-use utils::{as_u64, value_key, search_in_value, merge_values};
+use utils::{value_key, search_in_value, merge_values};
 use validation::validate;
 use index::IndexBuilder;
-use serde_json::{json, Map, Value};
+use query::{matches, execute_query};
+use serde_json::{Map, Value};
 use std::fs;
 use std::sync::Arc;
 
@@ -29,100 +31,7 @@ use std::sync::Arc;
 // Helper vkey remains temporarily until items that still use it are refactored
 pub(crate) fn vkey(v: Option<&Value>) -> String { value_key(v) }
 
-fn mat(item: &Value, cond: &Value) -> bool {
-    let co = match cond.as_object() { Some(o) => o, None => return false };
-    co.iter().all(|(k, v)| {
-        if k.starts_with('$') {
-            match k.as_str() {
-                "$or" => v.as_array().map(|a| a.iter().any(|c| mat(item, c))).unwrap_or(false),
-                "$and" => v.as_array().map(|a| a.iter().all(|c| mat(item, c))).unwrap_or(false),
-                "$nor" => !v.as_array().map(|a| a.iter().any(|c| mat(item, c))).unwrap_or(true),
-                "$not" => !mat(item, v),
-                _ => false
-            }
-        } else {
-            let iv = read_nested(item, k);
-            if let Some(vo) = v.as_object() {
-                vo.iter().all(|(op, ov)| match op.as_str() {
-                    "$eq" => iv == Some(ov), "$ne" => iv != Some(ov),
-                    "$gt" => iv.and_then(|x| x.as_f64()) > ov.as_f64(),
-                    "$gte" => iv.and_then(|x| x.as_f64()) >= ov.as_f64(),
-                    "$lt" => iv.and_then(|x| x.as_f64()) < ov.as_f64(),
-                    "$lte" => iv.and_then(|x| x.as_f64()) <= ov.as_f64(),
-                    "$in" => ov.as_array().map(|a| a.contains(iv.unwrap_or(&Value::Null))).unwrap_or(false),
-                    "$nin" => !ov.as_array().map(|a| a.contains(iv.unwrap_or(&Value::Null))).unwrap_or(true),
-                    "$exists" => ov.as_bool() == Some(iv.is_some()),
-                    "$regex" => { let re = ov.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.contains(re)).unwrap_or(false) }
-                    "$contains" => { let sub = ov.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.contains(sub)).unwrap_or(false) }
-                    "$startsWith" => { let sub = ov.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.starts_with(sub)).unwrap_or(false) }
-                    "$endsWith" => { let sub = ov.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.ends_with(sub)).unwrap_or(false) }
-                    _ => false
-                })
-            } else { iv == Some(v) }
-        }
-    })
-}
-
-
-
-fn exec_fluent(arr: &Vec<Value>, q: &Value) -> Vec<Value> {
-    let mut res = arr.clone();
-    if let Some(w) = q.get("where").and_then(|x| x.as_array()) {
-        res = res.into_iter().filter(|item| {
-            w.iter().all(|cond| {
-                let f = cond.get("field").and_then(|x| x.as_str()).unwrap_or("");
-                let op = cond.get("op").and_then(|x| x.as_str()).unwrap_or("=");
-                let v = cond.get("value").unwrap_or(&Value::Null);
-                let iv = read_nested(item, f);
-                match op {
-                    "=" | "eq" => iv == Some(v),
-                    "!=" | "ne" => iv != Some(v),
-                    ">" | "gt" => iv.and_then(|x| x.as_f64()) > v.as_f64(),
-                    ">=" | "gte" => iv.and_then(|x| x.as_f64()) >= v.as_f64(),
-                    "<" | "lt" => iv.and_then(|x| x.as_f64()) < v.as_f64(),
-                    "<=" | "lte" => iv.and_then(|x| x.as_f64()) <= v.as_f64(),
-                    "in" => v.as_array().map(|a| a.contains(iv.unwrap_or(&Value::Null))).unwrap_or(false),
-                    "contains" => { let sub = v.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.contains(sub)).unwrap_or(false) }
-                    "startsWith" => { let sub = v.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.starts_with(sub)).unwrap_or(false) }
-                    "endsWith" => { let sub = v.as_str().unwrap_or(""); iv.and_then(|x| x.as_str()).map(|s| s.ends_with(sub)).unwrap_or(false) }
-                    "between" => {
-                        if let Some(a) = v.as_array() {
-                            if a.len() == 2 {
-                                let val = iv.and_then(|x| x.as_f64()).unwrap_or(0.0);
-                                let min = a[0].as_f64().unwrap_or(0.0);
-                                let max = a[1].as_f64().unwrap_or(0.0);
-                                return val >= min && val <= max;
-                            }
-                        }
-                        false
-                    }
-                    _ => false
-                }
-            })
-        }).collect();
-    }
-    if let Some(o) = q.get("order_by").or(q.get("sort")) {
-        let f = o.get("field").and_then(|x| x.as_str()).unwrap_or("");
-        let dir = o.get("direction").and_then(|x| x.as_str()).unwrap_or("asc");
-        let desc = dir == "desc" || o.get("desc").and_then(|x| x.as_bool()).unwrap_or(false);
-        res.sort_by(|a, b| {
-            let va = read_nested(a, f); let vb = read_nested(b, f);
-            let cmp = match (va, vb) {
-                (Some(Value::Number(x)), Some(Value::Number(y))) => x.as_f64().partial_cmp(&y.as_f64()).unwrap_or(std::cmp::Ordering::Equal),
-                (Some(Value::String(x)), Some(Value::String(y))) => x.cmp(y),
-                _ => std::cmp::Ordering::Equal
-            };
-            if desc { cmp.reverse() } else { cmp }
-        });
-    }
-    if let Some(sk) = q.get("skip").or(q.get("offset")).and_then(as_u64) { if sk < res.len() as u64 { res = res.split_off(sk as usize); } else { res.clear(); } }
-    if let Some(l) = q.get("limit").and_then(as_u64) { res.truncate(l as usize); }
-    if let Some(s) = q.get("select").and_then(|x| x.as_array()) {
-        let fields: Vec<&str> = s.iter().filter_map(|x| x.as_str()).collect();
-        res = plk(&res, &fields);
-    }
-    res
-}
+// mat and exec_fluent have been moved to the query module
 
 fn agg(arr: &Vec<Value>, field: &str, op: &str) -> Value {
     let nums: Vec<f64> = arr.iter().filter_map(|i| read_nested(i, field).and_then(|v| v.as_f64())).collect();
@@ -277,15 +186,15 @@ impl JsonStore {
         i.read().map(|cd: Arc<Value>| {
             let arr = match read_path(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
             if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<_>>())); } } } } }
-            value_to_zval(&Value::Array(arr.iter().filter(|item| mat(item, &cond)).cloned().collect()))
+            value_to_zval(&Value::Array(arr.iter().filter(|item| matches(item, &cond)).cloned().collect()))
         }).unwrap_or_else(|_| Zval::new())
     }
     
     #[php(name = "findOne")]
-    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| mat(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
+    pub fn find_one(&self, collection: String, conditions: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let c = zval_to_value(conditions); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => a.iter().find(|item| matches(item, &c)).map(|f| value_to_zval(f)).unwrap_or_else(Zval::new), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
     #[php(name = "executeQuery")]
-    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(exec_fluent(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
+    pub fn execute_query(&self, collection: String, query_spec: &Zval) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let q = zval_to_value(query_spec); i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&Value::Array(execute_query(a, &q))), _ => value_to_zval(&Value::Array(vec![])) }).unwrap_or_else(|_| Zval::new()) }
 
     pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| match read_path(&cd, &collection) { Some(Value::Array(a)) => value_to_zval(&agg(a, &field, &operation)), _ => Zval::new() }).unwrap_or_else(|_| Zval::new()) }
     
