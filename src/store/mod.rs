@@ -40,6 +40,7 @@ pub mod options;
 pub mod cache;
 pub mod transaction;
 pub mod index_store;
+pub mod locking;
 pub mod inner;
 
 pub use options::StoreOpts;
@@ -47,3 +48,4 @@ pub use cache::CachedData;
 pub use inner::StoreInner;
 pub use index_store::IndexStore;
 pub use transaction::TransactionState;
+pub use locking::LockGuard;
