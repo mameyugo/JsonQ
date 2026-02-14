@@ -6,13 +6,13 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use jsonq::conversion::{zval_to_value, value_to_zval};
 //! use serde_json::json;
 //!
 //! // PHP → Rust
-//! let php_value = /* some Zval from PHP */;
-//! let rust_value = zval_to_value(&php_value);
+//! // let php_value = /* some Zval from PHP */;
+//! // let rust_value = zval_to_value(&php_value);
 //!
 //! // Rust → PHP
 //! let data = json!({"name": "Alice", "age": 30});

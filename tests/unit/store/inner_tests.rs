@@ -10,7 +10,7 @@ use tempfile::TempDir;
 fn temp_store() -> (StoreInner, TempDir) {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path().join("test.json");
-    let store = StoreInner::new(path.to_str().unwrap().to_string());
+    let store = StoreInner::new(path.to_str().unwrap().to_string()).unwrap();
     (store, temp_dir)
 }
 
@@ -31,7 +31,7 @@ fn test_store_creates_parent_directories() {
     let temp_dir = TempDir::new().unwrap();
     let path = temp_dir.path().join("nested/deep/data.json");
     
-    let store = StoreInner::new(path.to_str().unwrap().to_string());
+    let store = StoreInner::new(path.to_str().unwrap().to_string()).unwrap();
     
     assert!(store.path().exists());
     assert!(store.path().parent().unwrap().exists());
@@ -63,12 +63,12 @@ fn test_write_persists_to_disk() {
     let path_str = path.to_str().unwrap().to_string();
     
     {
-        let store = StoreInner::new(path_str.clone());
+        let store = StoreInner::new(path_str.clone()).unwrap();
         store.write(&json!({"persisted": true})).unwrap();
     }
     
     // Create new store instance
-    let store2 = StoreInner::new(path_str);
+    let store2 = StoreInner::new(path_str).unwrap();
     let data = store2.read().unwrap();
     assert_eq!(data["persisted"], true);
 }

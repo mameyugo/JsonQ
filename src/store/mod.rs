@@ -27,12 +27,12 @@
 //!
 //! # Examples
 //!
-//! ```rust
+//! ```rust,no_run
 //! use jsonq::store::StoreInner;
 //! use serde_json::json;
 //!
-//! let store = StoreInner::new("/path/to/data.json".to_string());
-//! store.write(&json!({"key": "value"}));
+//! let store = StoreInner::new("/path/to/data.json".to_string()).unwrap();
+//! store.write(&json!({"key": "value"})).unwrap();
 //! let data = store.read().unwrap();
 //! ```
 

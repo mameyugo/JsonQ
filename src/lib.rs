@@ -9,22 +9,26 @@ pub mod utils;
 pub mod validation;
 pub mod index;
 pub mod query;
+pub mod config;
+pub mod security;
 
 #[cfg(test)]
 pub mod php;
 
 use ext_php_rs::prelude::*;
 use ext_php_rs::types::Zval;
+use ext_php_rs::exception::PhpException;
 use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
 use utils::{value_key, search_in_value, merge_values};
 use validation::validate;
-use index::IndexBuilder;
 use query::{matches, execute_query};
+use security::validate_path_depth;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::sync::Arc;
+use std::path::PathBuf;
 
 // ══════════ HELPERS ══════════
 
@@ -71,7 +75,15 @@ pub struct JsonStore { inner: Option<StoreInner> }
 
 #[php_impl]
 impl JsonStore {
-    pub fn __construct(path: String) -> Self { Self { inner: Some(StoreInner::new(path)) } }
+    pub fn __construct(path: String) -> Self { 
+        match StoreInner::new(path) {
+            Ok(inner) => Self { inner: Some(inner) },
+            Err(e) => {
+                let _ = PhpException::new(format!("JsonQ Error: {}", e), 0, ext_php_rs::zend::ce::exception()).throw();
+                Self { inner: None }
+            }
+        }
+    }
 
     #[php(name = "setOption")]
     pub fn set_option(&self, key: String, value: &Zval) -> bool {
@@ -96,19 +108,19 @@ impl JsonStore {
     #[php(name = "beginTransaction")]
     pub fn begin_transaction(&self) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or("Not init")?;
-        i.begin_transaction().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
+        i.begin_transaction().map_err(|e| PhpException::from(e))?;
         Ok(true)
     }
     
     pub fn commit(&self) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or("Not init")?;
-        i.commit().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
+        i.commit().map_err(|e| PhpException::from(e))?;
         Ok(true)
     }
     
     pub fn rollback(&self) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or("Not init")?;
-        i.rollback().map_err(|e| ext_php_rs::exception::PhpException::from(e))?;
+        i.rollback().map_err(|e| PhpException::from(e))?;
         Ok(true)
     }
     
@@ -120,44 +132,51 @@ impl JsonStore {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
         let pv = zval_to_value(pairs);
         let po = match pv.as_object() { Some(o) => o, None => return Ok(0) };
-        let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        let cd = i.read().map_err(|e: String| PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
-        for (path, value) in po { write_path(&mut data, path, value.clone()); count += 1; }
-        i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        for (path, value) in po { 
+            validate_path_depth(path).map_err(|e| PhpException::from(e))?;
+            write_path(&mut data, path, value.clone()); 
+            count += 1; 
+        }
+        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(count)
     }
     
     #[php(name = "removeMany")]
     pub fn remove_many(&self, paths: Vec<String>) -> PhpResult<i64> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        let cd = i.read().map_err(|e: String| PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
-        for path in &paths { if remove_path(&mut data, path) { count += 1; } }
-        i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        for path in &paths { 
+            validate_path_depth(path).map_err(|e| PhpException::from(e))?;
+            if remove_path(&mut data, path) { count += 1; } 
+        }
+        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(count)
     }
 
     #[php(name = "toJson")]
     pub fn to_json(&self, pretty: Option<bool>) -> PhpResult<String> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        let cd = i.read().map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        let cd = i.read().map_err(|e: String| PhpException::from(e.to_string()))?;
         if pretty.unwrap_or(false) { serde_json::to_string_pretty(&*cd).map_err(|e| e.to_string().into()) } else { serde_json::to_string(&*cd).map_err(|e| e.to_string().into()) }
     }
     
     #[php(name = "fromJson")]
     pub fn from_json(&self, json_str: String) -> PhpResult<bool> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
-        let data: Value = serde_json::from_str(&json_str).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
-        i.write(&data).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        let data: Value = serde_json::from_str(&json_str).map_err(|e| PhpException::from(e.to_string()))?;
+        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(true)
     }
 
     #[php(name = "getAll")]
     pub fn get_all(&self) -> Zval { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| value_to_zval(&cd)).ok()).unwrap_or_else(Zval::new) }
     
-    pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| ext_php_rs::exception::PhpException::from(e.to_string()))?; Ok(true) }
+    pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| PhpException::from(e.to_string()))?; Ok(true) }
     
     pub fn search(&self, collection: String, keyword: String) -> Zval {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
@@ -169,17 +188,68 @@ impl JsonStore {
         }).unwrap_or_else(|_| Zval::new())
     }
 
-    pub fn get(&self, path: String) -> Zval { let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; i.read().map(|cd: Arc<Value>| read_path(&cd, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new)).unwrap_or_else(|_| Zval::new()) }
-    pub fn has(&self, path: String) -> bool { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| read_path(&cd, &path).is_some()).ok()).unwrap_or(false) }
-    pub fn count(&self, path: String) -> i64 { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) }
-    pub fn keys(&self, path: String) -> Vec<String> { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() }
+    pub fn get(&self, path: String) -> PhpResult<Zval> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        let data = i.read().map_err(|e| PhpException::from(e))?;
+        Ok(read_path(&data, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new))
+    }
+    
+    pub fn has(&self, path: String) -> bool { 
+        if validate_path_depth(&path).is_err() { return false; }
+        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| read_path(&cd, &path).is_some()).ok()).unwrap_or(false) 
+    }
+    
+    pub fn count(&self, path: String) -> i64 { 
+        if validate_path_depth(&path).is_err() { return -1; }
+        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) 
+    }
+    
+    pub fn keys(&self, path: String) -> Vec<String> { 
+        if validate_path_depth(&path).is_err() { return vec![]; }
+        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() 
+    }
 
-    pub fn set(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| write_path(d, &path, v)).is_ok() }
-    pub fn remove(&self, path: String) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { remove_path(d, &path); }).is_ok() }
-    pub fn push(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let v = zval_to_value(value); i.mutate(|d: &mut Value| { match read_path_mut(d, &path) { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).is_ok() }
-    pub fn merge(&self, path: String, value: &Zval) -> bool { let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; let nv = zval_to_value(value); i.mutate(|d: &mut Value| { if let Some(e) = read_path_mut(d, &path) { merge_values(e, &nv); } else { write_path(d, &path, nv); } }).is_ok() }
-    pub fn increment(&self, path: String, amount: Option<f64>) -> bool { let amt: f64 = amount.unwrap_or(1.0); let i: &StoreInner = match &self.inner { Some(i) => i, None => return false }; i.mutate(|d: &mut Value| { if let Some(v) = read_path_mut(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + amt); } } }).is_ok() }
-    pub fn decrement(&self, path: String, amount: Option<f64>) -> bool { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
+    pub fn set(&self, path: String, value: &Zval) -> PhpResult<bool> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        let v = zval_to_value(value); 
+        i.mutate(|d: &mut Value| write_path(d, &path, v)).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+    
+    pub fn remove(&self, path: String) -> PhpResult<bool> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        i.mutate(|d: &mut Value| { remove_path(d, &path); }).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+    
+    pub fn push(&self, path: String, value: &Zval) -> PhpResult<bool> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        let v = zval_to_value(value); 
+        i.mutate(|d: &mut Value| { match read_path_mut(d, &path) { Some(Value::Array(a)) => { a.push(v); } _ => {} } }).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+    
+    pub fn merge(&self, path: String, value: &Zval) -> PhpResult<bool> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        let nv = zval_to_value(value); 
+        i.mutate(|d: &mut Value| { if let Some(e) = read_path_mut(d, &path) { merge_values(e, &nv); } else { write_path(d, &path, nv); } }).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+    
+    pub fn increment(&self, path: String, amount: Option<f64>) -> PhpResult<bool> { 
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        let amt: f64 = amount.unwrap_or(1.0); 
+        let i = self.inner.as_ref().ok_or_else(|| PhpException::from("Not init"))?;
+        i.mutate(|d: &mut Value| { if let Some(v) = read_path_mut(d, &path) { if let Some(n) = v.as_f64() { *v = json!(n + (amt as f64)); } } }).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+    
+    pub fn decrement(&self, path: String, amount: Option<f64>) -> PhpResult<bool> { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
 
     pub fn find(&self, collection: String, conditions: &Zval) -> Zval {
         let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
@@ -262,16 +332,90 @@ impl JsonStore {
     pub fn backup(&self, backup_path: Option<String>) -> PhpResult<String> {
         let i = self.inner.as_ref().ok_or("Not init")?;
         let t = match backup_path { Some(p) if !p.is_empty() => p, _ => format!("{}.backup.{}",i.path.to_string_lossy(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs()) };
-        fs::copy(&i.path, &t).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        fs::copy(&i.path, &t).map_err(|e| PhpException::from(e.to_string()))?;
         Ok(t)
     }
     
     pub fn restore(&self, backup_path: String) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or("Not init")?;
-        fs::copy(&backup_path, &i.path).map_err(|e| ext_php_rs::exception::PhpException::from(e.to_string()))?;
+        fs::copy(&backup_path, &i.path).map_err(|e| PhpException::from(e.to_string()))?;
         *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear();
         Ok(true)
     }
+}
+
+// ══════════ GLOBAL CONFIG API ══════════
+
+/// Get current configuration
+#[php_function]
+pub fn jsonq_get_config() -> PhpResult<Zval> {
+    let config = crate::config::Config::get();
+    
+    let result = json!({
+        "max_file_size": config.max_file_size,
+        "max_file_size_mb": config.max_file_size as f64 / (1024.0 * 1024.0),
+        "max_validation_depth": config.max_validation_depth,
+        "max_path_depth": config.max_path_depth,
+        "allowed_extensions": config.allowed_extensions,
+        "base_path": config.base_path.map(|p| p.to_string_lossy().to_string()),
+    });
+    
+    Ok(value_to_zval(&result))
+}
+
+/// Set maximum file size (e.g. "100M", "1G")
+#[php_function]
+pub fn jsonq_set_max_file_size(size: String) -> PhpResult<bool> {
+    let parsed_size = crate::config::Config::parse_size(&size)
+        .map_err(|e| PhpException::from(e))?;
+    
+    crate::config::Config::update(|cfg| {
+        cfg.max_file_size = parsed_size;
+    });
+    
+    Ok(true)
+}
+
+/// Set allowed extensions (comma-separated, e.g. "json,db")
+#[php_function]
+pub fn jsonq_set_allowed_extensions(extensions: String) -> PhpResult<bool> {
+    let exts = crate::config::Config::parse_extensions(&extensions);
+    if exts.is_empty() {
+        return Err(PhpException::from("At least one extension must be allowed"));
+    }
+    
+    crate::config::Config::update(|cfg| {
+        cfg.allowed_extensions = exts;
+    });
+    
+    Ok(true)
+}
+
+/// Set base path restriction
+#[php_function]
+pub fn jsonq_set_base_path(path: String) -> PhpResult<bool> {
+    let path_buf = PathBuf::from(&path);
+    if !path_buf.exists() || !path_buf.is_dir() {
+        return Err(PhpException::from(format!("Invalid base path: {}", path)));
+    }
+    
+    let canonical = path_buf.canonicalize()
+        .map_err(|e| PhpException::from(format!("Failed to canonicalize base path: {}", e)))?;
+    
+    crate::config::Config::update(|cfg| {
+        cfg.base_path = Some(canonical);
+    });
+    
+    Ok(true)
+}
+
+/// Clear base path restriction
+#[php_function]
+pub fn jsonq_clear_base_path() -> bool {
+    crate::config::Config::update(|cfg| {
+        cfg.base_path = None;
+    });
+    true
 }
 
 #[php_function] 
@@ -281,7 +425,16 @@ pub fn jsonq_version() -> String {
 
 #[php_module] 
 pub fn get_module(module: ModuleBuilder) -> ModuleBuilder { 
+    // ✅ Initialize global configuration
+    crate::config::Config::init();
+    crate::config::php_ini::load_from_ini();
+
     module
         .function(wrap_function!(jsonq_version))
+        .function(wrap_function!(jsonq_get_config))
+        .function(wrap_function!(jsonq_set_max_file_size))
+        .function(wrap_function!(jsonq_set_allowed_extensions))
+        .function(wrap_function!(jsonq_set_base_path))
+        .function(wrap_function!(jsonq_clear_base_path))
         .class::<JsonStore>()
 }

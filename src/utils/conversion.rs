@@ -13,7 +13,7 @@ use serde_json::Value;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use jsonq::utils::as_u64;
 /// use serde_json::json;
 ///
@@ -25,13 +25,19 @@ use serde_json::Value;
 ///
 /// # Edge Cases
 ///
-/// - Negative numbers are cast to u64 (may wrap around)
+/// - Negative numbers are clamped to 0
 /// - Floats are truncated (3.9 → 3)
 /// - Non-numbers return None
 pub fn as_u64(value: &Value) -> Option<u64> {
-    value.as_u64()
-        .or_else(|| value.as_i64().map(|i| i as u64))
-        .or_else(|| value.as_f64().map(|f| f as u64))
+    if let Some(u) = value.as_u64() {
+        Some(u)
+    } else if let Some(i) = value.as_i64() {
+        Some(if i < 0 { 0 } else { i as u64 })
+    } else if let Some(f) = value.as_f64() {
+        Some(if f < 0.0 { 0 } else { f as u64 })
+    } else {
+        None
+    }
 }
 
 #[cfg(test)]

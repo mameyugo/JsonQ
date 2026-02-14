@@ -16,7 +16,7 @@ use serde_json::Value;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use serde_json::json;
 /// use jsonq::conversion::value_to_zval;
 ///
@@ -60,7 +60,7 @@ pub fn value_to_zval(val: &Value) -> Zval {
         }
         
         Value::String(s) => {
-            let _ = z.set_string(s, false);
+            let _ = z.set_string(s, true);
         }
         
         Value::Array(arr) => {

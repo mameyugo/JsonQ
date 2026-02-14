@@ -15,7 +15,7 @@ fn temp_store() -> (StoreInner, TempDir) {
     let path = temp_dir.path().join("concurrent.json");
     // Ensure the path is absolute and reachable
     let path_str = path.to_str().unwrap().to_owned();
-    let store = StoreInner::new(path_str);
+    let store = StoreInner::new(path_str).unwrap();
     (store, temp_dir)
 }
 
@@ -138,8 +138,8 @@ fn test_write_invalidates_other_process_cache() {
     let path_str = path.to_str().unwrap().to_string();
     
     // Create two separate store instances (simulating different processes)
-    let store1 = Arc::new(StoreInner::new(path_str.clone()));
-    let store2 = Arc::new(StoreInner::new(path_str.clone()));
+    let store1 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+    let store2 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
     
     // Store1 writes initial data
     store1.write(&json!({"version": 1})).unwrap();

@@ -63,8 +63,28 @@ use super::constraints::*;
 /// let errors = validate(&value, &schema, "numbers");
 /// assert!(errors.is_empty());
 /// ```
+/// Public validation API
 pub fn validate(value: &Value, schema: &Value, path: &str) -> Vec<Value> {
+    validate_with_depth(value, schema, path, 0)
+}
+
+/// Internal validation with depth tracking
+fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) -> Vec<Value> {
+    let config = crate::config::Config::get();
     let mut errors = Vec::new();
+
+    // ✅ PROTECTION: Check depth limit
+    if depth > config.max_validation_depth {
+        errors.push(json!({
+            "path": path,
+            "error": format!(
+                "Validation depth {} exceeds maximum allowed {}",
+                depth,
+                config.max_validation_depth
+            )
+        }));
+        return errors;
+    }
     
     if let Some(schema_obj) = schema.as_object() {
         // Type validation
@@ -130,7 +150,7 @@ pub fn validate(value: &Value, schema: &Value, path: &str) -> Vec<Value> {
                 };
                 
                 let prop_value = obj.get(prop_name).unwrap_or(&Value::Null);
-                errors.extend(validate(prop_value, prop_schema, &prop_path));
+                errors.extend(validate_with_depth(prop_value, prop_schema, &prop_path, depth + 1));
             }
         }
         
@@ -140,7 +160,7 @@ pub fn validate(value: &Value, schema: &Value, path: &str) -> Vec<Value> {
         {
             for (index, item) in arr.iter().enumerate() {
                 let item_path = format!("{}.{}", path, index);
-                errors.extend(validate(item, items_schema, &item_path));
+                errors.extend(validate_with_depth(item, items_schema, &item_path, depth + 1));
             }
         }
     }

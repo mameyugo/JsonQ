@@ -31,25 +31,26 @@ pub struct StoreInner {
 }
 
 impl StoreInner {
-    /// Create a new store instance
-    ///
-    /// Creates the file and parent directories if they don't exist.
-    /// Initializes with empty JSON object `{}` if file doesn't exist.
-    pub fn new(path: String) -> Self {
-        let p = PathBuf::from(&path);
+    /// Create a new store instance with path validation
+    pub fn new(path: String) -> Result<Self, String> {
+        // ✅ SECURITY: Validate path before using it
+        let validated_path = crate::security::validate_path(&path)?;
+        
+        // ✅ SECURITY: Check file size if it exists
+        crate::security::validate_file_size(&validated_path)?;
         
         // Create parent directories if needed
-        if let Some(parent) = p.parent() {
-            let _ = fs::create_dir_all(parent);
+        if let Some(parent) = validated_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
         
         // Create empty file if it doesn't exist
-        if !p.exists() {
-            let _ = fs::write(&p, "{}");
+        if !validated_path.exists() {
+            let _ = std::fs::write(&validated_path, "{}");
         }
         
         let instance = Self {
-            path: p,
+            path: validated_path,
             cache: RwLock::new(None),
             indexes: RwLock::new(HashMap::new()),
             opts: RwLock::new(StoreOpts::default()),
@@ -59,7 +60,7 @@ impl StoreInner {
         // Recover any pending transaction
         let _ = instance.recover_transaction();
         
-        instance
+        Ok(instance)
     }
     
     /// Get file modification time (seconds since UNIX epoch)
@@ -101,6 +102,9 @@ impl StoreInner {
     
     /// Internal read without acquiring lock (assumes caller holds lock)
     fn read_without_lock(&self) -> Result<Arc<Value>, String> {
+        // ✅ SECURITY: Validate file size before reading
+        crate::security::validate_file_size(&self.path)?;
+
         let mt = self.mtime();
         
         // Check cache validity
@@ -353,11 +357,15 @@ impl StoreInner {
         // Try to load index first
         let _ = self.ensure_index_loaded(coll, field);
 
+        // ✅ FIX #3: Acquire shared lock to ensure mtime check and access are atomic
+        let _lock = LockGuard::read(&self.path).ok()?;
+
         let indexes = self.indexes.read().unwrap();
         let store = indexes.get(coll)?;
         
+        let mt = self.mtime();
         // Index validity vs current file mtime
-        if store.built_at < self.mtime() { 
+        if store.built_at < mt { 
             return None; 
         }
         store.single.get(field)?.get(&crate::utils::value_key(Some(value))).cloned()
