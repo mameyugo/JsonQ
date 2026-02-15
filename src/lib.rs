@@ -52,7 +52,13 @@ fn agg(arr: &Vec<Value>, field: &str, op: &str) -> Value {
 
 fn grp(arr: &Vec<Value>, field: &str) -> Value {
     let mut m = Map::new();
-    for i in arr { let k = vkey(read_nested(i, field)); m.entry(k).or_insert(Value::Array(vec![])).as_array_mut().unwrap().push(i.clone()); }
+            for i in arr { 
+                let k = vkey(read_nested(i, field)); 
+                let entry = m.entry(k).or_insert(Value::Array(vec![]));
+                if let Some(arr_mut) = entry.as_array_mut() {
+                    arr_mut.push(i.clone());
+                }
+            }
     Value::Object(m)
 }
 
@@ -364,7 +370,11 @@ impl JsonStore {
     
     #[php(name = "listIndexes")]
     pub fn list_indexes(&self) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let idx = i.indexes.read().unwrap();
+        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; 
+        let idx = match i.indexes.read() {
+            Ok(lock) => lock,
+            Err(e) => e.into_inner(), // Recovery
+        };
         let mut r = Vec::new();
         for (c, s) in idx.iter() {
             for (f, im) in &s.single { let uv = im.len(); let te: usize = im.values().map(|v: &Vec<usize>|v.len()).sum(); r.push(json!({"collection":c,"type":"single","field":f,"unique_values":uv,"total_entries":te})); }
@@ -374,10 +384,30 @@ impl JsonStore {
     }
     
     #[php(name = "dropIndex")]
-    pub fn drop_index(&self, collection: String) -> bool { self.inner.as_ref().map(|i: &StoreInner| i.indexes.write().unwrap().remove(&collection).is_some()).unwrap_or(false) }
+    pub fn drop_index(&self, collection: String) -> bool { 
+        self.inner.as_ref().map(|i: &StoreInner| {
+            if let Ok(mut idx) = i.indexes.write() {
+                idx.remove(&collection).is_some()
+            } else if let Err(e) = i.indexes.write() {
+                e.into_inner().remove(&collection).is_some()
+            } else {
+                false
+            }
+        }).unwrap_or(false) 
+    }
     
     #[php(name = "dropAllIndexes")]
-    pub fn drop_all_indexes(&self) -> i64 { self.inner.as_ref().map(|i: &StoreInner| { let mut idx = i.indexes.write().unwrap(); let c = idx.len() as i64; idx.clear(); c }).unwrap_or(0) }
+    pub fn drop_all_indexes(&self) -> i64 { 
+        self.inner.as_ref().map(|i: &StoreInner| { 
+            let mut idx = match i.indexes.write() {
+                Ok(lock) => lock,
+                Err(e) => e.into_inner(),
+            }; 
+            let c = idx.len() as i64; 
+            idx.clear(); 
+            c 
+        }).unwrap_or(0) 
+    }
 
     pub fn stats(&self) -> Zval {
         let i = match &self.inner { Some(i) => i, None => return Zval::new() };
@@ -386,8 +416,21 @@ impl JsonStore {
             let fs = meta.len(); let fsh = if fs<1024{format!("{} B",fs)}else if fs<1048576{format!("{:.2} KB",fs as f64/1024.0)}else{format!("{:.2} MB",fs as f64/1048576.0)};
             let keys: Vec<Value> = if let Value::Object(o) = cd.as_ref() { o.keys().map(|k| Value::String(k.clone())).collect() } else { vec![] };
             let kc = if let Value::Object(o) = cd.as_ref() { o.len() } else { 0 };
-            let ic: usize = i.indexes.read().unwrap().values().map(|s| s.single.len()+s.compound.len()).sum();
-            value_to_zval(&json!({"file_path":i.path.to_string_lossy(),"file_size":fs,"file_size_h":fsh,"top_level_keys":keys,"key_count":kc,"active_indexes":ic}))
+            let mut m = Map::new();
+            m.insert("file_path".to_string(), json!(i.path.to_string_lossy()));
+            m.insert("file_size".to_string(), json!(fs));
+            m.insert("file_size_h".to_string(), json!(fsh));
+            m.insert("top_level_keys".to_string(), json!(keys));
+            m.insert("key_count".to_string(), json!(kc));
+            if let Some(i) = &self.inner {
+            let idx_lock = match i.indexes.read() {
+                Ok(lock) => lock,
+                Err(e) => e.into_inner(),
+            };
+            let ic: usize = idx_lock.values().map(|s| s.single.len()+s.compound.len()).sum();
+            m.insert("active_indexes".to_string(), json!(ic));
+        }
+            value_to_zval(&Value::Object(m))
         }).unwrap_or_else(|_| Zval::new())
     }
     
@@ -400,8 +443,21 @@ impl JsonStore {
     
     pub fn restore(&self, backup_path: String) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or("Not init")?;
-        fs::copy(&backup_path, &i.path).map_err(|e| PhpException::from(e.to_string()))?;
-        *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear();
+        fs::copy(&backup_path, &i.path).map_err(|e| format!("Restore failed: {}", e))?;
+        
+        // Clear caches
+        if let Ok(mut cache) = i.cache.write() {
+            *cache = None;
+        } else if let Err(e) = i.cache.write() {
+            *e.into_inner() = None;
+        }
+
+        if let Ok(mut idx) = i.indexes.write() {
+            idx.clear();
+        } else if let Err(e) = i.indexes.write() {
+            e.into_inner().clear();
+        }
+        
         Ok(true)
     }
 

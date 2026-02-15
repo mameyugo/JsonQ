@@ -43,17 +43,20 @@ impl Default for Config {
 impl Config {
     /// Initialize global configuration
     pub fn init() {
-        let mut config = CONFIG.write().unwrap();
-        if config.is_none() {
-            *config = Some(Self::default());
-        }
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| {
+            let mut config = CONFIG.write().unwrap();
+            if config.is_none() {
+                *config = Some(Self::default());
+            }
+        });
     }
     
     /// Get current configuration (read-only)
     pub fn get() -> Config {
-        CONFIG.read().unwrap()
-            .clone()
-            .unwrap_or_default()
+        CONFIG.read()
+            .map(|opt| opt.clone().unwrap_or_default())
+            .unwrap_or_else(|_| Config::default())
     }
     
     /// Update configuration
@@ -61,7 +64,9 @@ impl Config {
     where
         F: FnOnce(&mut Config),
     {
-        let mut config = CONFIG.write().unwrap();
+        let mut config = CONFIG.write()
+            .unwrap_or_else(|e| e.into_inner()); // Recover from poisoned lock for config updates
+        
         if let Some(cfg) = config.as_mut() {
             f(cfg);
         } else {

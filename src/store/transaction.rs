@@ -28,13 +28,17 @@ impl TransactionState {
     
     /// Begin a new transaction with initial data
     pub fn begin(&self, initial_data: Arc<Value>) -> Result<(), String> {
-        let mut in_tx = self.in_transaction.write().unwrap();
+        let mut in_tx = self.in_transaction.write()
+            .map_err(|e| format!("Transaction lock poisoned: {}", e))?;
         
         if *in_tx {
             return Err("Transaction already in progress".to_string());
         }
         
-        *self.tx_data.write().unwrap() = Some(initial_data);
+        let mut tx_data = self.tx_data.write()
+            .map_err(|e| format!("Transaction data lock poisoned: {}", e))?;
+        
+        *tx_data = Some(initial_data);
         *in_tx = true;
         
         Ok(())
@@ -42,28 +46,38 @@ impl TransactionState {
     
     /// Check if transaction is active
     pub fn is_active(&self) -> bool {
-        *self.in_transaction.read().unwrap()
+        *self.in_transaction.read().unwrap_or_else(|e| e.into_inner())
     }
     
     /// Get current transaction data (if any)
     pub fn get_data(&self) -> Option<Arc<Value>> {
-        self.tx_data.read().unwrap().clone()
+        self.tx_data.read()
+            .map(|d| d.clone())
+            .unwrap_or_else(|e| e.into_inner().clone())
     }
     
     /// Update transaction data
     pub fn update_data(&self, data: Arc<Value>) {
-        *self.tx_data.write().unwrap() = Some(data);
+        if let Ok(mut tx_data) = self.tx_data.write() {
+            *tx_data = Some(data);
+        } else if let Err(e) = self.tx_data.write() {
+             *e.into_inner() = Some(data);
+        }
     }
     
     /// Commit transaction and return final data
     pub fn commit(&self) -> Result<Arc<Value>, String> {
-        let mut in_tx = self.in_transaction.write().unwrap();
+        let mut in_tx = self.in_transaction.write()
+            .map_err(|e| format!("Transaction lock poisoned: {}", e))?;
         
         if !*in_tx {
             return Err("No active transaction".to_string());
         }
         
-        let data = self.tx_data.write().unwrap().take()
+        let mut tx_data_lock = self.tx_data.write()
+            .map_err(|e| format!("Transaction data lock poisoned: {}", e))?;
+            
+        let data = tx_data_lock.take()
             .ok_or("No transaction data")?;
         
         *in_tx = false;
@@ -73,13 +87,19 @@ impl TransactionState {
     
     /// Rollback transaction and discard changes
     pub fn rollback(&self) -> Result<(), String> {
-        let mut in_tx = self.in_transaction.write().unwrap();
+        let mut in_tx = self.in_transaction.write()
+            .map_err(|e| format!("Transaction lock poisoned: {}", e))?;
         
         if !*in_tx {
             return Err("No active transaction".to_string());
         }
         
-        *self.tx_data.write().unwrap() = None;
+        if let Ok(mut tx_data) = self.tx_data.write() {
+            *tx_data = None;
+        } else if let Err(e) = self.tx_data.write() {
+            *e.into_inner() = None;
+        }
+        
         *in_tx = false;
         
         Ok(())

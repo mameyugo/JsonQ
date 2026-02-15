@@ -68,6 +68,12 @@ impl Metrics {
             },
         }
     }
+
+    /// Access the global metrics singleton
+    pub fn global() -> &'static Self {
+        static INSTANCE: std::sync::OnceLock<Metrics> = std::sync::OnceLock::new();
+        INSTANCE.get_or_init(Self::new)
+    }
 }
 
 /// A point-in-time snapshot of metrics

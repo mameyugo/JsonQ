@@ -32,9 +32,14 @@ pub struct StoreInner {
     /// Transaction state
     pub(crate) transaction: TransactionState,
 
-    /// Operational metrics
-    pub(crate) metrics: Metrics,
+    /// Operational metrics (shared globally)
+    pub(crate) metrics: &'static Metrics,
 }
+
+// SAFETY: StoreInner is thread-safe because it uses internal synchronization (RwLock) 
+// for all mutable access and file-level locking for multi-process safety.
+unsafe impl Send for StoreInner {}
+unsafe impl Sync for StoreInner {}
 
 impl StoreInner {
     /// Create a new store instance with path validation
@@ -61,7 +66,7 @@ impl StoreInner {
             indexes: RwLock::new(HashMap::new()),
             opts: RwLock::new(StoreOpts::default()),
             transaction: TransactionState::new(),
-            metrics: Metrics::new(),
+            metrics: Metrics::global(),
         };
         
         // Recover any pending transaction
@@ -127,9 +132,11 @@ impl StoreInner {
 
         let mt = self.mtime();
         
+        
         // Check cache validity
         {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read()
+                .map_err(|e| format!("Cache lock poisoned: {}", e))?;
             if let Some(ref cached) = *cache {
                 if cached.is_valid(mt) {
                     self.metrics.record_cache_hit();
@@ -145,6 +152,9 @@ impl StoreInner {
         let file = File::open(&self.path)
             .map_err(|e| format!("Failed to open file: {}", e))?;
         
+        // SAFETY: Only mapping a read-only file descriptor that we've already 
+        // validated for size. The Mmap remains valid as long as the file is open.
+        // The `mmap` variable is dropped when it goes out of scope, unmapping the memory.
         let mmap = unsafe { 
             Mmap::map(&file)
                 .map_err(|e| format!("Failed to mmap file: {}", e))?
@@ -182,7 +192,11 @@ impl StoreInner {
         let arc_data = Arc::new(data);
         
         // Update cache
-        *self.cache.write().unwrap() = Some(CachedData::new(arc_data.clone(), mt));
+        {
+            let mut cache = self.cache.write()
+                .map_err(|e| format!("Cache lock poisoned: {}", e))?;
+            *cache = Some(CachedData::new(arc_data.clone(), mt));
+        }
         
         self.metrics.record_latency(start.elapsed());
         Ok(arc_data)
@@ -212,7 +226,8 @@ impl StoreInner {
     /// Internal flush without acquiring lock (assumes caller holds lock)
     fn flush_without_lock(&self, data: &Value) -> Result<(), String> {
         let start = std::time::Instant::now();
-        let opts = self.opts.read().unwrap();
+        let opts = self.opts.read()
+            .map_err(|e| format!("Options lock poisoned: {}", e))?;
         
         // Serialize JSON
         let json_str = if opts.pretty {
@@ -272,13 +287,17 @@ impl StoreInner {
         temp_guard.keep();
         
         // Update cache with new data
-        *self.cache.write().unwrap() = Some(CachedData::new(
+        let mut cache = self.cache.write()
+            .map_err(|e| format!("Cache lock poisoned: {}", e))?;
+        *cache = Some(CachedData::new(
             Arc::new(data.clone()),
             self.mtime()
         ));
 
         // Invalidate all indexes as file content (and mtime) has changed
-        self.indexes.write().unwrap().clear();
+        let mut indexes = self.indexes.write()
+            .map_err(|e| format!("Index lock poisoned: {}", e))?;
+        indexes.clear();
         
         // Flush completed
         self.metrics.record_write();
@@ -324,14 +343,27 @@ impl StoreInner {
         }
     }
     
-    /// Get storage options
+    /// Get storage options.
+    ///
+    /// This method attempts to acquire a read lock on the options.
+    /// If the lock is poisoned (e.g., a thread holding the lock panicked),
+    /// it will recover the inner value and return a clone of it.
     pub fn get_opts(&self) -> StoreOpts {
-        self.opts.read().unwrap().clone()
+        self.opts.read()
+            .map(|o| o.clone())
+            .unwrap_or_else(|e| e.into_inner().clone())
     }
     
-    /// Set storage options
+    /// Set storage options.
+    ///
+    /// This method attempts to acquire a write lock on the options.
+    /// If the lock is poisoned (e.g., a thread holding the lock panicked),
+    /// it will recover the inner value and update it.
     pub fn set_opts(&self, opts: StoreOpts) {
-        *self.opts.write().unwrap() = opts;
+        match self.opts.write() {
+            Ok(mut o) => *o = opts,
+            Err(e) => *e.into_inner() = opts,
+        }
     }
     
     /// Begin a transaction
@@ -424,7 +456,7 @@ impl StoreInner {
         let arr = match crate::path::read_path(&cd, coll) { Some(Value::Array(a)) => a, _ => return Err(format!("'{}' not array", coll)) };
         let mut idx: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, item) in arr.iter().enumerate() { idx.entry(crate::utils::value_key(crate::path::read_nested(item, field))).or_default().push(i); }
-        let mut indexes = self.indexes.write().unwrap();
+        let mut indexes = self.indexes.write().map_err(|e| format!("Index lock poisoned: {}", e))?;
         let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
         store.single.insert(field.to_string(), idx); store.built_at = mt;
         drop(indexes); // Drop lock before persistence
@@ -440,7 +472,7 @@ impl StoreInner {
             let k: String = fields.iter().map(|f| crate::utils::value_key(crate::path::read_nested(item, f))).collect::<Vec<_>>().join("|");
             idx.entry(k).or_default().push(i);
         }
-        let mut indexes = self.indexes.write().unwrap();
+        let mut indexes = self.indexes.write().map_err(|e| format!("Index lock poisoned: {}", e))?;
         let store = indexes.entry(coll.to_string()).or_insert_with(IndexStore::new);
         store.compound.insert(fields.to_vec(), idx); store.built_at = self.mtime();
         drop(indexes); // Drop lock before persistence
@@ -455,7 +487,7 @@ impl StoreInner {
         // ✅ FIX #3: Acquire shared lock to ensure mtime check and access are atomic
         let _lock = LockGuard::read(&self.path).ok()?;
 
-        let indexes = self.indexes.read().unwrap();
+        let indexes = self.indexes.read().ok()?;
         let store = indexes.get(coll)?;
         
         let mt = self.mtime();
@@ -473,8 +505,12 @@ impl StoreInner {
         self.path.with_extension(format!("{}.{}.idx", collection, hash))
     }
 
+    /// Persists the indexes for a given collection to disk.
+    ///
+    /// This method acquires a read lock on the indexes to ensure thread-safe access
+    /// while iterating and serializing index data.
     fn persist_index(&self, collection: &str) -> Result<(), String> {
-        let indexes = self.indexes.read().unwrap();
+        let indexes = self.indexes.read().map_err(|e| format!("Index lock poisoned: {}", e))?;
         
         if let Some(store) = indexes.get(collection) {
             // Persist single indexes
@@ -488,21 +524,31 @@ impl StoreInner {
         Ok(())
     }
 
+    /// Ensures that a specific index is loaded into memory.
+    ///
+    /// This method first attempts to acquire a read lock to check if the index is already loaded and valid.
+    /// If not, it attempts to load the index from disk.
     fn ensure_index_loaded(&self, collection: &str, field: &str) -> bool {
         {
-            let indexes = self.indexes.read().unwrap();
-            if let Some(store) = indexes.get(collection) {
-               if store.single.contains_key(field) {
-                   if store.built_at >= self.mtime() {
-                       return true; 
+            let indexes = self.indexes.read().ok(); // Use ok() to handle poisoned lock gracefully
+            if let Some(indexes_guard) = indexes {
+                if let Some(store) = indexes_guard.get(collection) {
+                   if store.single.contains_key(field) {
+                       if store.built_at >= self.mtime() {
+                           return true; 
+                       }
                    }
-               }
+                }
             }
         }
         
         self.load_index_from_disk(collection, field).is_ok()
     }
 
+    /// Loads an index from disk into memory.
+    ///
+    /// This method acquires a write lock on the indexes to safely insert the loaded index data.
+    /// It handles potential poisoning of the lock.
     fn load_index_from_disk(&self, collection: &str, field: &str) -> Result<(), String> {
         let path = self.index_file_path(collection, field);
         if !path.exists() { return Err("Index file not found".to_string()); }
@@ -517,7 +563,7 @@ impl StoreInner {
             return Err("Index is stale".to_string());
         }
 
-        let mut indexes = self.indexes.write().unwrap();
+        let mut indexes = self.indexes.write().map_err(|e| format!("Index lock poisoned: {}", e))?;
         let store = indexes.entry(collection.to_string())
             .or_insert_with(IndexStore::new);
         
@@ -525,5 +571,19 @@ impl StoreInner {
         store.built_at = built_at;
         
         Ok(())
+    }
+
+    /// Drops all indexes currently held in memory.
+    ///
+    /// This method acquires a write lock on the indexes to clear them.
+    /// If the lock is poisoned, it returns 0, indicating no indexes were dropped.
+    pub fn drop_all_indexes(&self) -> usize {
+        if let Ok(mut indexes) = self.indexes.write() {
+            let count = indexes.len();
+            indexes.clear();
+            count
+        } else {
+            0
+        }
     }
 }
