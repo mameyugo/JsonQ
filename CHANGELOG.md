@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2025-02-15
+
+### Added
+
+- **Safe Regex Execution**
+  - Thread-safe regex cache with size and backtracking limits to prevent ReDoS attacks.
+  - Integrated into `$regex` operator in `find()`.
+
+- **Storage Compression**
+  - Gzip and Zstd compression support.
+  - Transparent decompression (auto-detects magic numbers).
+  - Configurable via `setOption('compression', 'zstd')`.
+
+- **Metrics & Observability**
+  - Real-time tracking of reads, writes, cache hits/misses, and average latency.
+  - Exposed via `JsonStore::getMetrics()`.
+
+- **Query Optimizer**
+  - Intelligent index selection based on query complexity and index availability.
+  - Automatic optimization for multi-condition `find()` queries.
+
+### Changed
+
+- Updated `$regex` operator to support true regular expressions instead of simple substring matching.
+- Refactored `JsonStore` option methods for better stability and return types.
+
 ## [0.1.0] - 2025-02-08
 
 ### Added
@@ -67,5 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GitHub Actions CI pipeline
   - MIT license
 
-[Unreleased]: https://github.com/mameyugo/JsonQ/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/mameyugo/JsonQ/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/mameyugo/JsonQ/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mameyugo/JsonQ/releases/tag/v0.1.0

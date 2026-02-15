@@ -1,6 +1,7 @@
 //! Core storage engine implementation
 
 use super::{StoreOpts, CachedData, IndexStore, LockGuard};
+use super::options::CompressionMethod;
 use super::transaction::TransactionState;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -9,7 +10,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use memmap2::Mmap;
-
+use crate::metrics::Metrics;
 use crate::store::cleanup::{cleanup_temp_files, TempFileGuard};
 
 /// Core storage engine
@@ -30,6 +31,9 @@ pub struct StoreInner {
     
     /// Transaction state
     pub(crate) transaction: TransactionState,
+
+    /// Operational metrics
+    pub(crate) metrics: Metrics,
 }
 
 impl StoreInner {
@@ -57,6 +61,7 @@ impl StoreInner {
             indexes: RwLock::new(HashMap::new()),
             opts: RwLock::new(StoreOpts::default()),
             transaction: TransactionState::new(),
+            metrics: Metrics::new(),
         };
         
         // Recover any pending transaction
@@ -114,6 +119,9 @@ impl StoreInner {
     
     /// Internal read without acquiring lock (assumes caller holds lock)
     fn read_without_lock(&self) -> Result<Arc<Value>, String> {
+        let start = std::time::Instant::now();
+        self.metrics.record_read();
+        
         // ✅ SECURITY: Validate file size before reading
         crate::security::validate_file_size(&self.path)?;
 
@@ -124,10 +132,14 @@ impl StoreInner {
             let cache = self.cache.read().unwrap();
             if let Some(ref cached) = *cache {
                 if cached.is_valid(mt) {
+                    self.metrics.record_cache_hit();
+                    self.metrics.record_latency(start.elapsed());
                     return Ok(cached.data.clone());
                 }
             }
         }
+        
+        self.metrics.record_cache_miss();
         
         // Cache miss or invalid - read from disk
         let file = File::open(&self.path)
@@ -138,7 +150,33 @@ impl StoreInner {
                 .map_err(|e| format!("Failed to mmap file: {}", e))?
         };
         
-        let data: Value = serde_json::from_slice(&mmap)
+        // Detect compression by magic numbers
+        let content = if mmap.len() >= 2 && mmap[0] == 0x1F && mmap[1] == 0x8B {
+            // Gzip detected
+            #[cfg(feature = "compression")]
+            {
+                use std::io::Read;
+                let mut decoder = flate2::read::GzDecoder::new(&mmap[..]);
+                let mut buf = Vec::new();
+                decoder.read_to_end(&mut buf).map_err(|e| format!("Gzip decompression failed: {}", e))?;
+                buf
+            }
+            #[cfg(not(feature = "compression"))]
+            return Err("Gzip detected but compression feature is disabled".to_string());
+        } else if mmap.len() >= 4 && &mmap[0..4] == &[0x28, 0xB5, 0x2F, 0xFD] {
+            // Zstd detected
+            #[cfg(feature = "compression")]
+            {
+                zstd::decode_all(&mmap[..]).map_err(|e| format!("Zstd decompression failed: {}", e))?
+            }
+            #[cfg(not(feature = "compression"))]
+            return Err("Zstd detected but compression feature is disabled".to_string());
+        } else {
+            // Assume uncompressed JSON
+            mmap.to_vec()
+        };
+        
+        let data: Value = serde_json::from_slice(&content)
             .map_err(|e| format!("Failed to parse JSON: {}", e))?;
         
         let arc_data = Arc::new(data);
@@ -146,6 +184,7 @@ impl StoreInner {
         // Update cache
         *self.cache.write().unwrap() = Some(CachedData::new(arc_data.clone(), mt));
         
+        self.metrics.record_latency(start.elapsed());
         Ok(arc_data)
     }
     
@@ -183,6 +222,30 @@ impl StoreInner {
         }
         .map_err(|e| format!("JSON serialization failed: {}", e))?;
         
+        // Prepare bytes (possibly compressed)
+        let final_bytes = match opts.compression {
+            CompressionMethod::None => json_str.as_bytes().to_vec(),
+            CompressionMethod::Gzip => {
+                #[cfg(feature = "compression")]
+                {
+                    use std::io::Write;
+                    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+                    encoder.write_all(json_str.as_bytes()).map_err(|e| e.to_string())?;
+                    encoder.finish().map_err(|e| e.to_string())?
+                }
+                #[cfg(not(feature = "compression"))]
+                return Err("Gzip requested but compression feature is disabled".to_string());
+            }
+            CompressionMethod::Zstd => {
+                #[cfg(feature = "compression")]
+                {
+                    zstd::encode_all(json_str.as_bytes(), 3).map_err(|e| e.to_string())?
+                }
+                #[cfg(not(feature = "compression"))]
+                return Err("Zstd requested but compression feature is disabled".to_string());
+            }
+        };
+        
         // Write to temporary file
         let tmp_path = self.path.with_extension("tmp");
         let mut temp_guard = TempFileGuard::new(&tmp_path)?;
@@ -191,7 +254,7 @@ impl StoreInner {
             let mut file = File::create(temp_guard.path())
                 .map_err(|e| format!("Failed to create temp file: {}", e))?;
             
-            file.write_all(json_str.as_bytes())
+            file.write_all(&final_bytes)
                 .map_err(|e| format!("Failed to write data: {}", e))?;
             
             // Force flush to disk if fsync enabled
@@ -216,6 +279,9 @@ impl StoreInner {
 
         // Invalidate all indexes as file content (and mtime) has changed
         self.indexes.write().unwrap().clear();
+        
+        // Flush completed
+        self.metrics.record_write();
         
         tracing::info!(
             "Flush completed in {:?} for {:?}",

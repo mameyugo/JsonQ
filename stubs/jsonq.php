@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.1.0
+ * @version 0.2.0
  * @license MIT
  */
 
@@ -137,7 +137,7 @@ class Store
      * Supported operators:
      * - Comparison: $eq, $ne, $gt, $gte, $lt, $lte
      * - Array: $in, $nin
-     * - String: $contains, $startsWith, $endsWith
+     * - String: $regex, $contains, $startsWith, $endsWith
      * - Type: $exists, $size, $type
      * - Logical: $and, $or, $not
      *
@@ -279,6 +279,15 @@ class Store
      */
     public function dropAllIndexes(): int {}
 
+    // ── Metrics & Observability ──
+
+    /**
+     * Get real-time operational metrics and statistics.
+     *
+     * @return array {reads, writes, cache_hits, cache_misses, avg_latency_ms}
+     */
+    public function getMetrics(): array {}
+
     // ── Utilities ──
 
     /**
@@ -314,6 +323,7 @@ class Store
      * Options:
      * - "pretty" (bool): Enable pretty-printed JSON output (default: false)
      * - "fsync" (bool): Enable fsync on writes for crash safety (default: false)
+     * - "compression" (string): Set storage compression ("none", "gzip", "zstd") (default: "none")
      *
      * @param string $key Option name
      * @param mixed $value Option value
@@ -432,6 +442,6 @@ class Store
 /**
  * Get the JsonQ extension version.
  *
- * @return string Semantic version string (e.g., "0.1.0")
+ * @return string Semantic version string (e.g., "0.2.0")
  */
 function jsonq_version(): string {}

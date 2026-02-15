@@ -54,7 +54,7 @@ JsonQ/
 1. **Fork and branch** — Create a feature branch from `main`
 2. **Make changes** — Edit the relevant module in `src/` and add tests
 3. **Build** — `cargo build --release`
-4. **Test** — Run the full test suite (67+ tests must pass)
+4. **Test** — Run the full test suite (100+ tests must pass)
 5. **Submit PR** — Open a pull request with a clear description
 
 ## Code Style
@@ -96,6 +96,26 @@ JsonQ/
 - Update documentation if the API changes
 - All existing tests must pass
 - Add a CHANGELOG entry under `[Unreleased]`
+
+## Release Process
+
+When releasing a new version of JsonQ, follow these steps to ensure consistency:
+
+1. **Update `Cargo.toml`**: Increment the `version` field.
+2. **Update PHP Stubs**: Update the `@version` tag in `stubs/jsonq.php`.
+3. **Update Documentation**:
+    - Update the version number in `README.md`.
+    - Update `CHANGELOG.md` with the new version and release date.
+    - Update version strings in `docs/API.md` and `docs/INSTALL-DEBIAN.md`.
+4. **Update Tests**: Update the version assertion in `tests/integration/run_tests.php`.
+5. **Run Full Test Suite**: Ensure `cargo test` and `php tests/integration/run_tests.php` both pass.
+6. **Commit and Tag**:
+   ```bash
+   git add .
+   git commit -m "Release v0.X.X"
+   git tag -a v0.X.X -m "Release v0.X.X"
+   git push origin main --tags
+   ```
 
 ## Performance Considerations
 

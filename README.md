@@ -14,7 +14,7 @@
 
 ---
 
-**JsonQ** is a native PHP extension written in Rust that provides a complete JSON file storage engine with MongoDB-style queries, fluent query builder, aggregation, schema validation, and in-memory indexes — all without requiring a database server.
+**JsonQ** is a native PHP extension written in Rust that provides a complete JSON file storage engine with MongoDB-style queries, safe regex support, storage compression, real-time metrics, fluent query builder, aggregation, schema validation, and in-memory indexes — all without requiring a database server.
 
 ## Why JsonQ?
 
@@ -27,6 +27,9 @@
 | Atomic writes | ❌ | ✅ | ✅ fsync + rename |
 | Memory-mapped I/O | ❌ | ✅ | ✅ |
 | Zero-copy cache | ❌ | ❌ | ✅ Arc-based |
+| Safe Regex (ReDoS-safe) | ❌ | ❌ | ✅ |
+| Storage Compression | ❌ | ❌ | ✅ Gzip / Zstd |
+| Metrics/Observability | ❌ | ❌ | ✅ |
 
 ## Quick Start
 
@@ -141,6 +144,7 @@ $store->find('users', [
 ]);
 
 // String operators
+$store->find('users', ['email' => ['$regex' => '@gmail\.com$']]);
 $store->find('users', ['email' => ['$contains' => '@gmail']]);
 $store->find('users', ['name' => ['$startsWith' => 'A']]);
 
@@ -150,7 +154,7 @@ $store->find('users', ['age' => ['$type' => 'integer']]);
 $store->find('users', ['email' => ['$exists' => true]]);
 ```
 
-**Supported operators:** `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$contains`, `$startsWith`, `$endsWith`, `$exists`, `$size`, `$type`, `$and`, `$or`, `$not`
+**Supported operators:** `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`, `$regex`, `$contains`, `$startsWith`, `$endsWith`, `$exists`, `$size`, `$type`, `$and`, `$or`, `$not`
 
 #### Fluent Queries
 
@@ -200,6 +204,23 @@ $store->dropIndex('users');         // Drop collection indexes
 $store->dropAllIndexes();           // Drop all indexes
 ```
 
+### Metrics & Observability
+
+```php
+// Get real-time operational statistics
+$metrics = $store->getMetrics();
+
+/**
+ * $metrics = [
+ *   'reads'          => 1250,   // Total read operations
+ *   'writes'         => 450,    // Total write operations
+ *   'cache_hits'     => 1100,   // Successful cache lookups
+ *   'cache_misses'   => 150,    // Hard disk reads
+ *   'avg_latency_ms' => 0.015   // Average read latency
+ * ]
+ */
+```
+
 ### Schema Validation
 
 ```php
@@ -236,9 +257,10 @@ $store->restore('/path/to/backup.json');
 ### Options
 
 ```php
-$store->setOption('pretty', true);   // Pretty-print JSON output
-$store->setOption('fsync', true);    // Enable fsync for crash safety
-$store->getOption('pretty');         // Read option value
+$store->setOption('pretty', true);      // Pretty-print JSON output
+$store->setOption('fsync', true);       // Enable fsync for crash safety
+$store->setOption('compression', 'zstd'); // "none", "gzip", "zstd"
+$store->getOption('pretty');            // Read option value
 ```
 
 ### Transactions

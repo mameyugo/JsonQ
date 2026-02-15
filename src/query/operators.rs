@@ -75,7 +75,15 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
             expected.as_bool() == Some(item_value.is_some())
         }
         
-        "$regex" | "$contains" => {
+        "$regex" => {
+            let pattern = expected.as_str().unwrap_or("");
+            item_value
+                .and_then(|v| v.as_str())
+                .map(|s| crate::query::regex_safe::is_match(s, pattern))
+                .unwrap_or(false)
+        }
+        
+        "$contains" => {
             let pattern = expected.as_str().unwrap_or("");
             item_value
                 .and_then(|v| v.as_str())

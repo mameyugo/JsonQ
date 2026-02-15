@@ -1,5 +1,13 @@
 //! Storage configuration options
 
+/// Compression methods for storage
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum CompressionMethod {
+    None,
+    Gzip,
+    Zstd,
+}
+
 /// Storage engine configuration
 ///
 /// Controls performance vs safety tradeoffs
@@ -10,6 +18,9 @@ pub struct StoreOpts {
     
     /// Force fsync after writes (slower, guaranteed durability)
     pub fsync: bool,
+
+    /// Compression method
+    pub compression: CompressionMethod,
 }
 
 impl Default for StoreOpts {
@@ -17,6 +28,7 @@ impl Default for StoreOpts {
         Self {
             pretty: false,  // Compact JSON by default (faster)
             fsync: false,   // Skip fsync by default (faster)
+            compression: CompressionMethod::None,
         }
     }
 }
@@ -27,6 +39,7 @@ impl StoreOpts {
         Self {
             pretty: false,
             fsync: false,
+            compression: CompressionMethod::None,
         }
     }
     
@@ -35,6 +48,7 @@ impl StoreOpts {
         Self {
             pretty: true,
             fsync: true,
+            compression: CompressionMethod::None,
         }
     }
     
@@ -43,6 +57,7 @@ impl StoreOpts {
         Self {
             pretty: false,
             fsync: true,
+            compression: CompressionMethod::None,
         }
     }
 }

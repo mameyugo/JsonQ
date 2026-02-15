@@ -1,0 +1,14 @@
+{
+    "company": "TechCorp",
+    "location": "Madrid",
+    "metadata": {
+        "version": "1.0",
+        "created_at": "2024-01-01"
+    },
+    "employees": [
+        {"id": 1, "name": "Juan", "department": "Engineering", "role": "Lead"},
+        {"id": 2, "name": "Pedro", "department": "Engineering", "role": "Senior"},
+        {"id": 3, "name": "Maria", "department": "Marketing", "role": "Manager"},
+        {"id": 4, "name": "Ana", "department": "HR", "role": "Specialist"}
+    ]
+}

@@ -1,5 +1,4 @@
 <?php
-require_once __DIR__ . '/debug_fluent_pagination.php';
 
 function assert_eq($expected, $actual, $msg = "") {
     if ($expected !== $actual) {

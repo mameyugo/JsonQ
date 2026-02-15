@@ -1,12 +1,13 @@
 //! Tests for StoreOpts
 
-use jsonq::store::StoreOpts;
+use jsonq::store::options::{StoreOpts, CompressionMethod};
 
 #[test]
 fn test_default_options() {
     let opts = StoreOpts::default();
     assert_eq!(opts.pretty, false);
     assert_eq!(opts.fsync, false);
+    assert!(matches!(opts.compression, CompressionMethod::None));
 }
 
 #[test]
@@ -35,6 +36,7 @@ fn test_custom_options() {
     let opts = StoreOpts {
         pretty: true,
         fsync: false,
+        compression: CompressionMethod::None,
     };
     assert_eq!(opts.pretty, true);
     assert_eq!(opts.fsync, false);

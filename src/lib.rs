@@ -12,6 +12,7 @@ pub mod query;
 pub mod config;
 pub mod security;
 pub mod error;
+pub mod metrics;
 
 #[cfg(test)]
 pub mod php;
@@ -21,6 +22,7 @@ use ext_php_rs::types::Zval;
 use ext_php_rs::exception::PhpException;
 use conversion::{value_to_zval, zval_to_value};
 use store::StoreInner;
+use store::options::CompressionMethod;
 use path::{read_path, read_path_mut, read_nested, write_path, remove_path};
 use utils::{value_key, search_in_value, merge_values};
 use validation::validate;
@@ -86,17 +88,6 @@ impl JsonStore {
         }
     }
 
-    #[php(name = "setOption")]
-    pub fn set_option(&self, key: String, value: &Zval) -> bool {
-        let i = match &self.inner { Some(i) => i, None => return false };
-        let mut opts = i.get_opts();
-        match key.as_str() {
-            "pretty" | "pretty_print" => { opts.pretty = value.bool().unwrap_or(false); i.set_opts(opts); true }
-            "fsync" | "sync" => { opts.fsync = value.bool().unwrap_or(false); i.set_opts(opts); true }
-            _ => false,
-        }
-    }
-    
     #[php(name = "getOption")]
     pub fn get_option(&self, key: String) -> PhpResult<Zval> {
         let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
@@ -105,9 +96,31 @@ impl JsonStore {
         match key.as_str() { 
             "pretty" | "pretty_print" => { z.set_bool(opts.pretty); } 
             "fsync" | "sync" => { z.set_bool(opts.fsync); } 
+            "compression" => { z.set_string(&format!("{:?}", opts.compression), false)?; }
             _ => return Err(format!("Unknown option: {}", key).into()),
         }
         Ok(z)
+    }
+
+    #[php(name = "setOption")]
+    pub fn set_option(&self, key: String, value: &Zval) -> PhpResult<bool> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let mut opts = i.get_opts();
+        match key.as_str() {
+            "pretty" | "pretty_print" => { opts.pretty = value.bool().unwrap_or(false); }
+            "fsync" | "sync" => { opts.fsync = value.bool().unwrap_or(false); }
+            "compression" => {
+                let s = value.str().unwrap_or("none").to_lowercase();
+                opts.compression = match s.as_str() {
+                    "gzip" => CompressionMethod::Gzip,
+                    "zstd" => CompressionMethod::Zstd,
+                    _ => CompressionMethod::None,
+                };
+            }
+            _ => return Err(format!("Unknown option: {}", key).into()),
+        }
+        i.set_opts(opts);
+        Ok(true)
     }
 
     #[php(name = "beginTransaction")]
@@ -276,11 +289,36 @@ impl JsonStore {
     pub fn decrement(&self, path: String, amount: Option<f64>) -> PhpResult<bool> { self.increment(path, Some(-(amount.unwrap_or(1.0)))) }
 
     pub fn find(&self, collection: String, conditions: &Zval) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() }; let cond = zval_to_value(conditions);
+        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
+        let cond = zval_to_value(conditions);
+        
         i.read().map(|cd: Arc<Value>| {
-            let arr = match read_path(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
-            if let Some(co) = cond.as_object() { if co.len() == 1 { if let Some((f, v)) = co.iter().next() { if !f.starts_with('$') && !v.is_object() { if let Some(pos) = i.idx_lookup(&collection, f, v) { return value_to_zval(&Value::Array(pos.iter().filter_map(|&j| arr.get(j).cloned()).collect::<Vec<_>>())); } } } } }
-            value_to_zval(&Value::Array(arr.iter().filter(|item| matches(item, &cond)).cloned().collect()))
+            let arr = match read_path(&cd, &collection) {
+                Some(Value::Array(a)) => a,
+                _ => return value_to_zval(&Value::Array(vec![]))
+            };
+            
+            use crate::query::optimizer::{optimize_query, ExecutionPlan};
+            let plan = optimize_query(i, &collection, &cond);
+            
+            let matched: Vec<Value> = match plan {
+                ExecutionPlan::FullScan => {
+                    arr.iter().filter(|item| matches(item, &cond)).cloned().collect()
+                }
+                ExecutionPlan::IndexedScan { field, value, remaining_conditions, .. } => {
+                    if let Some(pos) = i.idx_lookup(&collection, &field, &value) {
+                        let remaining = Value::Object(remaining_conditions);
+                        pos.iter()
+                           .filter_map(|&idx| arr.get(idx))
+                           .filter(|item| matches(item, &remaining))
+                           .cloned()
+                           .collect()
+                    } else {
+                        vec![]
+                    }
+                }
+            };
+            value_to_zval(&Value::Array(matched))
         }).unwrap_or_else(|_| Zval::new())
     }
     
@@ -365,6 +403,13 @@ impl JsonStore {
         fs::copy(&backup_path, &i.path).map_err(|e| PhpException::from(e.to_string()))?;
         *i.cache.write().unwrap() = None; i.indexes.write().unwrap().clear();
         Ok(true)
+    }
+
+    #[php(name = "getMetrics")]
+    pub fn get_metrics(&self) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let snapshot = i.metrics.snapshot();
+        Ok(value_to_zval(&serde_json::to_value(snapshot).map_err(|e| e.to_string())?))
     }
 }
 

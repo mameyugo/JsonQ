@@ -2,7 +2,7 @@
 //!
 //! These are integration-style tests that require actual file system access
 
-use jsonq::store::{StoreInner, StoreOpts};
+use jsonq::store::{StoreInner, StoreOpts, options::CompressionMethod};
 use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
@@ -110,6 +110,7 @@ fn test_options_pretty_print() {
     store.set_opts(StoreOpts {
         pretty: true,
         fsync: false,
+        compression: CompressionMethod::None,
     });
     
     store.write(&json!({"key": "value"})).unwrap();
@@ -125,6 +126,7 @@ fn test_options_compact() {
     store.set_opts(StoreOpts {
         pretty: false,
         fsync: false,
+        compression: CompressionMethod::None,
     });
     
     store.write(&json!({"key": "value"})).unwrap();
