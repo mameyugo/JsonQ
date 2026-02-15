@@ -11,6 +11,7 @@ pub mod index;
 pub mod query;
 pub mod config;
 pub mod security;
+pub mod error;
 
 #[cfg(test)]
 pub mod php;
@@ -97,12 +98,16 @@ impl JsonStore {
     }
     
     #[php(name = "getOption")]
-    pub fn get_option(&self, key: String) -> Zval {
-        let i = match &self.inner { Some(i) => i, None => return Zval::new() };
+    pub fn get_option(&self, key: String) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
         let opts = i.get_opts();
         let mut z = Zval::new();
-        match key.as_str() { "pretty"|"pretty_print" => { z.set_bool(opts.pretty); } "fsync"|"sync" => { z.set_bool(opts.fsync); } _ => {} }
-        z
+        match key.as_str() { 
+            "pretty" | "pretty_print" => { z.set_bool(opts.pretty); } 
+            "fsync" | "sync" => { z.set_bool(opts.fsync); } 
+            _ => return Err(format!("Unknown option: {}", key).into()),
+        }
+        Ok(z)
     }
 
     #[php(name = "beginTransaction")]
@@ -174,18 +179,24 @@ impl JsonStore {
     }
 
     #[php(name = "getAll")]
-    pub fn get_all(&self) -> Zval { self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| value_to_zval(&cd)).ok()).unwrap_or_else(Zval::new) }
+    pub fn get_all(&self) -> PhpResult<Zval> { 
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let cd = i.read()?;
+        Ok(value_to_zval(&cd))
+    }
     
     pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| PhpException::from(e.to_string()))?; Ok(true) }
     
-    pub fn search(&self, collection: String, keyword: String) -> Zval {
-        let i: &StoreInner = match &self.inner { Some(i) => i, None => return Zval::new() };
+    pub fn search(&self, collection: String, keyword: String) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
         let kw = keyword.to_lowercase();
-        i.read().map(|cd: Arc<Value>| {
-            let arr = match read_path(&cd, &collection) { Some(Value::Array(a)) => a, _ => return value_to_zval(&Value::Array(vec![])) };
-            let matched: Vec<Value> = arr.iter().filter(|item| search_in_value(item, &kw)).cloned().collect();
-            value_to_zval(&Value::Array(matched))
-        }).unwrap_or_else(|_| Zval::new())
+        let cd = i.read()?;
+        let arr = match read_path(&cd, &collection) { 
+            Some(Value::Array(a)) => a, 
+            _ => return Ok(value_to_zval(&Value::Array(vec![]))) 
+        };
+        let matched: Vec<Value> = arr.iter().filter(|item| search_in_value(item, &kw)).cloned().collect();
+        Ok(value_to_zval(&Value::Array(matched)))
     }
 
     pub fn get(&self, path: String) -> PhpResult<Zval> { 
@@ -195,19 +206,32 @@ impl JsonStore {
         Ok(read_path(&data, &path).map(|v| value_to_zval(v)).unwrap_or_else(Zval::new))
     }
     
-    pub fn has(&self, path: String) -> bool { 
-        if validate_path_depth(&path).is_err() { return false; }
-        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| read_path(&cd, &path).is_some()).ok()).unwrap_or(false) 
+    pub fn has(&self, path: String) -> PhpResult<bool> { 
+        validate_path_depth(&path)?;
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let cd = i.read()?;
+        Ok(read_path(&cd, &path).is_some())
     }
     
-    pub fn count(&self, path: String) -> i64 { 
-        if validate_path_depth(&path).is_err() { return -1; }
-        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Array(a)) => a.len() as i64, Some(Value::Object(o)) => o.len() as i64, _ => -1 }).ok()).unwrap_or(-1) 
+    pub fn count(&self, path: String) -> PhpResult<i64> { 
+        validate_path_depth(&path)?;
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let cd = i.read()?;
+        match read_path(&cd, &path) { 
+            Some(Value::Array(a)) => Ok(a.len() as i64), 
+            Some(Value::Object(o)) => Ok(o.len() as i64), 
+            _ => Ok(0) 
+        }
     }
     
-    pub fn keys(&self, path: String) -> Vec<String> { 
-        if validate_path_depth(&path).is_err() { return vec![]; }
-        self.inner.as_ref().and_then(|i: &StoreInner| i.read().map(|cd: Arc<Value>| match read_path(&cd, &path) { Some(Value::Object(o)) => o.keys().cloned().collect(), _ => vec![] }).ok()).unwrap_or_default() 
+    pub fn keys(&self, path: String) -> PhpResult<Vec<String>> { 
+        validate_path_depth(&path)?;
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let cd = i.read()?;
+        match read_path(&cd, &path) { 
+            Some(Value::Object(o)) => Ok(o.keys().cloned().collect()), 
+            _ => Ok(vec![]) 
+        }
     }
 
     pub fn set(&self, path: String, value: &Zval) -> PhpResult<bool> { 
@@ -428,6 +452,14 @@ pub fn get_module(module: ModuleBuilder) -> ModuleBuilder {
     // ✅ Initialize global configuration
     crate::config::Config::init();
     crate::config::php_ini::load_from_ini();
+
+    // ✅ Initialize tracing (logging)
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_writer(std::io::stderr) // Send logs to stderr
+        .try_init();
+
+    tracing::info!("JsonQ module initialized");
 
     module
         .function(wrap_function!(jsonq_version))

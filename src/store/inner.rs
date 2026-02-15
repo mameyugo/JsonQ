@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use memmap2::Mmap;
 
+use crate::store::cleanup::{cleanup_temp_files, TempFileGuard};
+
 /// Core storage engine
 ///
 /// Manages JSON file storage with caching, transactions, and indexing
@@ -59,6 +61,16 @@ impl StoreInner {
         
         // Recover any pending transaction
         let _ = instance.recover_transaction();
+        
+        // ✅ AUTO-CLEANUP: Clean orphaned temp files on initialization
+        match cleanup_temp_files(&instance.path) {
+            Ok(count) if count > 0 => {
+                tracing::info!("Cleaned {} orphaned temp files for {:?}", count, instance.path);
+            }
+            _ => {}
+        }
+        
+        tracing::debug!("Store instance created for {:?}", instance.path);
         
         Ok(instance)
     }
@@ -160,6 +172,7 @@ impl StoreInner {
 
     /// Internal flush without acquiring lock (assumes caller holds lock)
     fn flush_without_lock(&self, data: &Value) -> Result<(), String> {
+        let start = std::time::Instant::now();
         let opts = self.opts.read().unwrap();
         
         // Serialize JSON
@@ -172,8 +185,10 @@ impl StoreInner {
         
         // Write to temporary file
         let tmp_path = self.path.with_extension("tmp");
+        let mut temp_guard = TempFileGuard::new(&tmp_path)?;
+        
         {
-            let mut file = File::create(&tmp_path)
+            let mut file = File::create(temp_guard.path())
                 .map_err(|e| format!("Failed to create temp file: {}", e))?;
             
             file.write_all(json_str.as_bytes())
@@ -187,8 +202,11 @@ impl StoreInner {
         }
         
         // Atomic rename
-        fs::rename(&tmp_path, &self.path)
+        fs::rename(temp_guard.path(), &self.path)
             .map_err(|e| format!("Failed to rename temp file: {}", e))?;
+        
+        // ✅ SUCCESS: Keep the temp file
+        temp_guard.keep();
         
         // Update cache with new data
         *self.cache.write().unwrap() = Some(CachedData::new(
@@ -198,6 +216,12 @@ impl StoreInner {
 
         // Invalidate all indexes as file content (and mtime) has changed
         self.indexes.write().unwrap().clear();
+        
+        tracing::info!(
+            "Flush completed in {:?} for {:?}",
+            start.elapsed(),
+            self.path
+        );
         
         Ok(())
     }
@@ -312,6 +336,11 @@ impl StoreInner {
         Ok(())
     }
     
+    /// Manual cleanup of temporary files
+    pub fn cleanup(&self) -> Result<usize, String> {
+        cleanup_temp_files(&self.path)
+    }
+
     /// Get reference to indexes
     pub fn indexes(&self) -> &RwLock<HashMap<String, IndexStore>> {
         &self.indexes

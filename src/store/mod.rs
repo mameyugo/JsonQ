@@ -41,6 +41,7 @@ pub mod cache;
 pub mod transaction;
 pub mod index_store;
 pub mod locking;
+pub mod cleanup;
 pub mod inner;
 
 pub use options::StoreOpts;

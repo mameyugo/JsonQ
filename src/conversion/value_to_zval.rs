@@ -3,6 +3,19 @@
 //! This module handles the conversion from Rust's strongly-typed JSON values
 //! to PHP's dynamic Zval type system.
 
+//! # Memory Safety
+//!
+//! According to ext-php-rs 0.15.6 documentation:
+//! - `set_string(s, false)` -> Copies string to PHP heap (SAFE)
+//! - `set_string(s, true)` -> Uses persistent allocation (for globals)
+//!
+//! We use `false` because:
+//! 1. The string `s` comes from `serde_json::Value` which is owned by Rust
+//! 2. The `Zval` will outlive the `Value` only in PHP userland
+//! 3. PHP needs its own copy to manage the string's lifecycle
+//!
+//! This is safe because PHP makes a copy and manages it independently.
+
 use ext_php_rs::types::{Zval, ZendHashTable};
 use serde_json::Value;
 
@@ -10,7 +23,8 @@ use serde_json::Value;
 ///
 /// # Safety
 ///
-/// - Strings are duplicated (`set_string(s, true)`) to prevent use-after-free
+/// Strings are copied to PHP heap (`persistent = false`) to ensure
+/// PHP owns the string data and manages its lifecycle correctly.
 /// - Nested structures are recursively converted
 /// - Numbers overflow gracefully (saturating to f64 if needed)
 ///
@@ -60,7 +74,9 @@ pub fn value_to_zval(val: &Value) -> Zval {
         }
         
         Value::String(s) => {
-            let _ = z.set_string(s, true);
+            // ✅ CORRECT: false = copy to PHP heap
+            // PHP will own and manage this string
+            let _ = z.set_string(s, false);
         }
         
         Value::Array(arr) => {
