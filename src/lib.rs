@@ -411,24 +411,6 @@ impl JsonStore {
         Ok(true)
     }
 
-    #[php(name = "appendJsonl")]
-    pub fn append_jsonl(&self, record: &Zval) -> PhpResult<bool> {
-        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
-        let value = zval_to_value(record);
-        i.append_jsonl(&value).map_err(|e| PhpException::from(e))?;
-        Ok(true)
-    }
-
-    #[php(name = "readJsonl")]
-    pub fn read_jsonl(&self) -> PhpResult<Vec<String>> {
-        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
-        let records: Vec<String> = i
-            .read_jsonl_iter()
-            .map_err(|e| PhpException::from(e))?
-            .map(|v| serde_json::to_string(&v).unwrap_or_default())
-            .collect();
-        Ok(records)
-    }
 
     pub fn merge(&self, path: String, value: &Zval) -> PhpResult<bool> {
         validate_path_depth(&path).map_err(|e| PhpException::from(e))?;

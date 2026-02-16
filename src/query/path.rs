@@ -1,5 +1,4 @@
 use crate::query::error::QueryError;
-use crate::utils::string::suggest_similar;
 use serde_json::Value;
 
 fn get_context(input: &str, position: usize) -> String {

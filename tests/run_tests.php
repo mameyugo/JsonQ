@@ -61,7 +61,7 @@ echo str_repeat('═', 50) . "\n";
 echo "\n📦 Module\n";
 
 test('jsonq_version returns string', function() {
-    assert_eq('0.2.3', jsonq_version());
+    assert_eq('0.3.0', jsonq_version());
 });
 
 test('JsonQ\\Store class exists', function() {
