@@ -3,6 +3,7 @@
 //! These are integration-style tests that require actual file system access
 
 use jsonq::store::{StoreInner, StoreOpts, options::CompressionMethod};
+use std::sync::Arc;
 use serde_json::json;
 use std::fs;
 use tempfile::TempDir;
@@ -50,7 +51,7 @@ fn test_write_and_read() {
     let (store, _temp) = temp_store();
     
     let test_data = json!({"key": "value", "number": 42});
-    store.write(&test_data).unwrap();
+    store.write(Arc::new(test_data)).unwrap();
     
     let read_data = store.read().unwrap();
     assert_eq!(*read_data, test_data);
@@ -64,7 +65,7 @@ fn test_write_persists_to_disk() {
     
     {
         let store = StoreInner::new(path_str.clone()).unwrap();
-        store.write(&json!({"persisted": true})).unwrap();
+        store.write(Arc::new(json!({"persisted": true}))).unwrap();
     }
     
     // Create new store instance
@@ -77,7 +78,7 @@ fn test_write_persists_to_disk() {
 fn test_cache_validity() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"cached": true})).unwrap();
+    store.write(Arc::new(json!({"cached": true}))).unwrap();
     
     // First read (cache miss)
     let data1 = store.read().unwrap();
@@ -93,7 +94,7 @@ fn test_cache_validity() {
 fn test_mutate() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"counter": 0})).unwrap();
+    store.write(Arc::new(json!({"counter": 0}))).unwrap();
     
     store.mutate(|data| {
         data["counter"] = json!(42);
@@ -113,7 +114,7 @@ fn test_options_pretty_print() {
         compression: CompressionMethod::None,
     });
     
-    store.write(&json!({"key": "value"})).unwrap();
+    store.write(Arc::new(json!({"key": "value"}))).unwrap();
     
     let content = fs::read_to_string(store.path()).unwrap();
     assert!(content.contains("\n"), "Pretty print should have newlines");
@@ -129,7 +130,7 @@ fn test_options_compact() {
         compression: CompressionMethod::None,
     });
     
-    store.write(&json!({"key": "value"})).unwrap();
+    store.write(Arc::new(json!({"key": "value"}))).unwrap();
     
     let content = fs::read_to_string(store.path()).unwrap();
     assert!(!content.contains("\n"), "Compact should have no newlines");
@@ -139,14 +140,14 @@ fn test_options_compact() {
 fn test_transaction_write_buffering() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"version": 1})).unwrap();
+    store.write(Arc::new(json!({"version": 1}))).unwrap();
     
     // Begin transaction
     store.begin_transaction().unwrap();
     assert!(store.in_transaction());
     
     // Write in transaction (buffered, not on disk)
-    store.write(&json!({"version": 2})).unwrap();
+    store.write(Arc::new(json!({"version": 2}))).unwrap();
     
     // Data in transaction buffer
     let tx_data = store.read().unwrap();
@@ -163,10 +164,10 @@ fn test_transaction_write_buffering() {
 fn test_transaction_commit() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"committed": false})).unwrap();
+    store.write(Arc::new(json!({"committed": false}))).unwrap();
     
     store.begin_transaction().unwrap();
-    store.write(&json!({"committed": true})).unwrap();
+    store.write(Arc::new(json!({"committed": true}))).unwrap();
     store.commit().unwrap();
     
     assert!(!store.in_transaction());
@@ -179,10 +180,10 @@ fn test_transaction_commit() {
 fn test_transaction_rollback() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"original": true})).unwrap();
+    store.write(Arc::new(json!({"original": true}))).unwrap();
     
     store.begin_transaction().unwrap();
-    store.write(&json!({"modified": true})).unwrap();
+    store.write(Arc::new(json!({"modified": true}))).unwrap();
     store.rollback().unwrap();
     
     assert!(!store.in_transaction());
@@ -201,7 +202,7 @@ fn test_mtime_tracking() {
     
     std::thread::sleep(std::time::Duration::from_millis(10));
     
-    store.write(&json!({"updated": true})).unwrap();
+    store.write(Arc::new(json!({"updated": true}))).unwrap();
     
     let mtime2 = store.mtime();
     
@@ -213,7 +214,7 @@ fn test_mtime_tracking() {
 fn test_atomic_write_safety() {
     let (store, _temp) = temp_store();
     
-    store.write(&json!({"safe": true})).unwrap();
+    store.write(Arc::new(json!({"safe": true}))).unwrap();
     
     // Temp file should be cleaned up
     let tmp_path = store.path().with_extension("tmp");
@@ -232,7 +233,7 @@ fn test_large_data_write_and_read() {
         })).collect::<Vec<_>>()
     });
     
-    store.write(&large_data).unwrap();
+    store.write(Arc::new(large_data)).unwrap();
     let read = store.read().unwrap();
     
     assert_eq!(read["users"].as_array().unwrap().len(), 1000);

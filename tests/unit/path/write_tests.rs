@@ -1,6 +1,7 @@
 //! Tests for path writing functions
 
 use jsonq::path::{write_path, remove_path};
+use std::sync::Arc;
 use serde_json::json;
 
 #[test]

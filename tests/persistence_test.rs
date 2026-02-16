@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests {
     use jsonq::store::StoreInner;
+use std::sync::Arc;
     use serde_json::json;
     use std::thread;
     use std::time::Duration;
@@ -21,7 +22,7 @@ mod tests {
                 {"id": 3, "role": "admin"}
             ]
         });
-        store.write(&data).unwrap();
+        store.write(Arc::new(data)).unwrap();
         
         // 2. Build index (this should trigger persistence)
         store.build_index("users", "role").unwrap();
@@ -65,7 +66,7 @@ mod tests {
                 {"id": 2, "cat": "B"}
             ]
         });
-        store.write(&data).unwrap();
+        store.write(Arc::new(data)).unwrap();
         store.build_index("products", "cat").unwrap();
         
         // Force file mtime update by writing new data
@@ -78,7 +79,7 @@ mod tests {
                 {"id": 3, "cat": "A"}
             ]
         });
-        store.write(&new_data).unwrap(); // This updates file mtime
+        store.write(Arc::new(new_data)).unwrap(); // This updates file mtime
         
         let results = store.idx_lookup("products", "cat", &json!("A"));
         assert!(results.is_none(), "Should return None for stale index");
@@ -91,14 +92,14 @@ mod tests {
         let path_str = path.to_str().unwrap().to_string();
         
         let store = StoreInner::new(path_str).unwrap();
-        store.write(&json!({"users": [{"id":1, "name":"a"}]})).unwrap();
+        store.write(Arc::new(json!({"users": [{"id":1, "name":"a"}]}))).unwrap();
         store.build_index("users", "name").unwrap();
         
         // Ensure index exists
         assert!(store.indexes().read().unwrap().contains_key("users"));
         
         // Write new data
-        store.write(&json!({"users": [{"id":1, "name":"b"}]})).unwrap();
+        store.write(Arc::new(json!({"users": [{"id":1, "name":"b"}]}))).unwrap();
         
         // Index should be gone from memory
         assert!(!store.indexes().read().unwrap().contains_key("users"));

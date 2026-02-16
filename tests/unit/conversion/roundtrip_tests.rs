@@ -3,6 +3,7 @@
 //! Tests that Value → Zval → Value preserves data correctly
 
 use jsonq::conversion::{value_to_zval, zval_to_value};
+use std::sync::Arc;
 use serde_json::json;
 
 #[test]

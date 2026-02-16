@@ -1,6 +1,7 @@
 //! Integration tests combining read/write/navigate
 
 use jsonq::path::{read_path, write_path, remove_path};
+use std::sync::Arc;
 use serde_json::json;
 
 #[test]

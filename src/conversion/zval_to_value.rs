@@ -106,37 +106,59 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
         return Value::Array(vec![]);
     }
     
-    // Detect if this should be an array or object
-    let is_sequential_array = detect_sequential_array(ht);
+    // Single-pass conversion with on-the-fly detection
+    // We build both structures during iteration, then return the appropriate one
+    let mut arr = Vec::with_capacity(ht.len());
+    let mut map = Map::new();
+    let mut expected_index: u64 = 0;
+    let mut is_sequential = true;
     
-    if is_sequential_array {
-        // Build sequential array
-        let mut arr = Vec::with_capacity(ht.len());
-        
-        for (_, val) in ht.iter() {
-            arr.push(zval_to_value(val));
+    for (key, val) in ht.iter() {
+        // Check if this key maintains sequential array property
+        match key {
+            ArrayKey::Long(idx) => {
+                if idx as u64 != expected_index {
+                    is_sequential = false;
+                }
+                expected_index += 1;
+            }
+            // Any string key means it's an object
+            ArrayKey::String(_) | ArrayKey::Str(_) => {
+                is_sequential = false;
+            }
         }
         
+        // Convert value once
+        let value = zval_to_value(val);
+        
+        // Build both structures (we'll discard one later)
+        // This is faster than iterating twice, even with the extra memory
+        if is_sequential {
+            // Only build array if still sequential
+            arr.push(value.clone());
+        }
+        
+        // Always build map for object case
+        let key_str = match key {
+            ArrayKey::String(s) => s.to_string(),
+            ArrayKey::Str(s) => s.to_string(),
+            ArrayKey::Long(idx) => idx.to_string(),
+        };
+        map.insert(key_str, value);
+    }
+    
+    // Return appropriate structure
+    if is_sequential {
         Value::Array(arr)
     } else {
-        // Build associative object
-        let mut map = Map::new();
-        
-        for (key, val) in ht.iter() {
-            let key_str = match key {
-                ArrayKey::String(s) => s.to_string(),
-                ArrayKey::Str(s) => s.to_string(),
-                ArrayKey::Long(idx) => idx.to_string(),
-            };
-            
-            map.insert(key_str, zval_to_value(val));
-        }
-        
         Value::Object(map)
     }
 }
 
 /// Detect if a PHP hashtable represents a sequential array
+///
+/// **Note**: This function is now deprecated in favor of the single-pass
+/// implementation in `ht_to_value()`. It's kept for reference but not used.
 ///
 /// Returns true if:
 /// - All keys are integers (Long)
@@ -152,6 +174,7 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
 /// ['x' => 'a', 'y' => 'b'] → false (string keys)
 /// [0 => 'a', 'x' => 'b'] → false (mixed keys)
 /// ```
+#[allow(dead_code)]
 fn detect_sequential_array(ht: &ZendHashTable) -> bool {
     let mut expected_index: u64 = 0;
     

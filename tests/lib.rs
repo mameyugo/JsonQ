@@ -4,6 +4,7 @@ mod unit;
 #[allow(unused_variables)]
 mod php_stubs {
     use std::os::raw::{c_char, c_int, c_void};
+use std::sync::Arc;
 
     #[no_mangle]
     pub extern "C" fn zend_hash_next_index_insert() -> *mut c_void { std::ptr::null_mut() }

@@ -1,6 +1,7 @@
 //! Tests for navigation utilities
 
 use jsonq::path::navigate::{split_path_key, is_array_index, path_depth};
+use std::sync::Arc;
 
 #[test]
 fn test_split_simple_path() {

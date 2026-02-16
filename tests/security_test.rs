@@ -1,4 +1,5 @@
 use jsonq::config::Config;
+use std::sync::Arc;
 use jsonq::security::{validate_path, validate_file_size, validate_path_depth};
 use jsonq::validation::validate;
 use serde_json::json;

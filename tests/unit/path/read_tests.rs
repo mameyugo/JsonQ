@@ -1,6 +1,7 @@
 //! Tests for path reading functions
 
 use jsonq::path::{read_path, read_path_mut, read_nested};
+use std::sync::Arc;
 use serde_json::json;
 
 #[test]

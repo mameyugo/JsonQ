@@ -164,7 +164,7 @@ impl JsonStore {
             write_path(&mut data, path, value.clone()); 
             count += 1; 
         }
-        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
+        i.write(Arc::new(data)).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(count)
     }
     
@@ -178,7 +178,7 @@ impl JsonStore {
             validate_path_depth(path).map_err(|e| PhpException::from(e))?;
             if remove_path(&mut data, path) { count += 1; } 
         }
-        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
+        i.write(Arc::new(data)).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(count)
     }
 
@@ -193,7 +193,7 @@ impl JsonStore {
     pub fn from_json(&self, json_str: String) -> PhpResult<bool> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
         let data: Value = serde_json::from_str(&json_str).map_err(|e| PhpException::from(e.to_string()))?;
-        i.write(&data).map_err(|e: String| PhpException::from(e.to_string()))?;
+        i.write(Arc::new(data)).map_err(|e: String| PhpException::from(e.to_string()))?;
         Ok(true)
     }
 
@@ -204,7 +204,7 @@ impl JsonStore {
         Ok(value_to_zval(&cd))
     }
     
-    pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(&Value::Object(Map::new())).map_err(|e: String| PhpException::from(e.to_string()))?; Ok(true) }
+    pub fn clear(&self) -> PhpResult<bool> { let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?; i.write(Arc::new(Value::Object(Map::new()))).map_err(|e: String| PhpException::from(e.to_string()))?; Ok(true) }
     
     pub fn search(&self, collection: String, keyword: String) -> PhpResult<Zval> {
         let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;

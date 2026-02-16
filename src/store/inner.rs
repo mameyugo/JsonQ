@@ -206,9 +206,9 @@ impl StoreInner {
     /// 
     /// If in transaction: buffers data in memory (no disk write)
     /// If not in transaction: writes atomically to disk via flush()
-    pub fn write(&self, data: &Value) -> Result<(), String> {
+    pub fn write(&self, data: Arc<Value>) -> Result<(), String> {
         if self.transaction.is_active() {
-            self.transaction.update_data(Arc::new(data.clone()));
+            self.transaction.update_data(data);
             return Ok(());
         }
         
@@ -216,7 +216,7 @@ impl StoreInner {
     }
     
     /// Flush data to disk atomically with exclusive lock
-    pub fn flush(&self, data: &Value) -> Result<(), String> {
+    pub fn flush(&self, data: Arc<Value>) -> Result<(), String> {
         // Acquire exclusive lock for writing
         let _lock = LockGuard::write(&self.path)?;
         
@@ -224,16 +224,16 @@ impl StoreInner {
     }
 
     /// Internal flush without acquiring lock (assumes caller holds lock)
-    fn flush_without_lock(&self, data: &Value) -> Result<(), String> {
+    fn flush_without_lock(&self, data: Arc<Value>) -> Result<(), String> {
         let start = std::time::Instant::now();
         let opts = self.opts.read()
             .map_err(|e| format!("Options lock poisoned: {}", e))?;
         
         // Serialize JSON
         let json_str = if opts.pretty {
-            serde_json::to_string_pretty(data)
+            serde_json::to_string_pretty(&*data)
         } else {
-            serde_json::to_string(data)
+            serde_json::to_string(&*data)
         }
         .map_err(|e| format!("JSON serialization failed: {}", e))?;
         
@@ -286,11 +286,11 @@ impl StoreInner {
         // ✅ SUCCESS: Keep the temp file
         temp_guard.keep();
         
-        // Update cache with new data
+        // Update cache with new data (reuse Arc, no clone!)
         let mut cache = self.cache.write()
             .map_err(|e| format!("Cache lock poisoned: {}", e))?;
         *cache = Some(CachedData::new(
-            Arc::new(data.clone()),
+            data,
             self.mtime()
         ));
 
@@ -339,7 +339,7 @@ impl StoreInner {
             self.transaction.update_data(Arc::new(data));
             Ok(())
         } else {
-            self.flush_without_lock(&data)
+            self.flush_without_lock(Arc::new(data))
         }
     }
     
@@ -402,7 +402,7 @@ impl StoreInner {
         let _lock = LockGuard::write(&self.path)?;
         
         // Flush data to disk without re-acquiring lock
-        self.flush_without_lock(&data)?;
+        self.flush_without_lock(data)?;
 
         // Remove transaction file
         let tx_file = self.path.with_extension("tx");

@@ -4,6 +4,7 @@
 //! between multiple threads/processes.
 
 use jsonq::store::StoreInner;
+use std::sync::Arc;
 use serde_json::json;
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -25,7 +26,7 @@ fn test_concurrent_reads_allowed() {
     let store = Arc::new(store);
     
     // Initialize with test data
-    store.write(&json!({"counter": 0})).unwrap();
+    store.write(Arc::new(json!({"counter": 0}))).unwrap();
     
     let barrier = Arc::new(Barrier::new(10));
     let mut handles = vec![];
@@ -57,7 +58,7 @@ fn test_write_blocks_concurrent_writes() {
     let (store, _temp) = temp_store();
     let store = Arc::new(store);
     
-    store.write(&json!({"counter": 0})).unwrap();
+    store.write(Arc::new(json!({"counter": 0}))).unwrap();
     
     let barrier = Arc::new(Barrier::new(5));
     let mut handles = vec![];
@@ -101,7 +102,7 @@ fn test_concurrent_read_modify_write() {
     let (store, _temp) = temp_store();
     let store = Arc::new(store);
     
-    store.write(&json!({"value": 0})).unwrap();
+    store.write(Arc::new(json!({"value": 0}))).unwrap();
     
     let iterations = 20;
     let mut handles = vec![];
@@ -142,7 +143,7 @@ fn test_write_invalidates_other_process_cache() {
     let store2 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
     
     // Store1 writes initial data
-    store1.write(&json!({"version": 1})).unwrap();
+    store1.write(Arc::new(json!({"version": 1}))).unwrap();
     
     // Store2 reads and caches it
     let data2_cached = store2.read().unwrap();
@@ -152,7 +153,7 @@ fn test_write_invalidates_other_process_cache() {
     thread::sleep(Duration::from_secs(1));
     
     // Store1 updates data
-    store1.write(&json!({"version": 2})).unwrap();
+    store1.write(Arc::new(json!({"version": 2}))).unwrap();
     
     // Store2 should detect the change via mtime and re-read
     let data2_fresh = store2.read().unwrap();
@@ -164,7 +165,7 @@ fn test_reader_writer_exclusion() {
     let (store, _temp) = temp_store();
     let store = Arc::new(store);
     
-    store.write(&json!({"data": "initial"})).unwrap();
+    store.write(Arc::new(json!({"data": "initial"}))).unwrap();
     
     let store_clone = Arc::clone(&store);
     

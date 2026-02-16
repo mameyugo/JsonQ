@@ -3,6 +3,7 @@
 //! Tests conversion from serde_json::Value to PHP Zval
 
 use jsonq::conversion::value_to_zval;
+use std::sync::Arc;
 use serde_json::json;
 
 #[test]
