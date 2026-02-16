@@ -5,8 +5,8 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.2.0
- * @license MIT
+ * @version 0.2.3
+ * @license The PHP License, version 3.01
  */
 
 namespace JsonQ;
@@ -442,6 +442,6 @@ class Store
 /**
  * Get the JsonQ extension version.
  *
- * @return string Semantic version string (e.g., "0.2.0")
+ * @return string Semantic version string (e.g., "0.2.3")
  */
 function jsonq_version(): string {}

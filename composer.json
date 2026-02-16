@@ -11,9 +11,11 @@
     "rust",
     "mongodb-style",
     "queries",
-    "transactions"
+    "transactions",
+    "integration-tests",
+    "jsonl"
   ],
-  "license": "MIT",
+  "license": "PHP-3.01",
   "authors": [
     {
       "name": "Mameyugo",

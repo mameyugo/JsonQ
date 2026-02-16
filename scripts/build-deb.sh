@@ -141,24 +141,17 @@ Source: https://github.com/mameyugo/JsonQ
 
 Files: *
 Copyright: $(date +%Y) Mameyugo
-License: MIT
- Permission is hereby granted, free of charge, to any person obtaining a copy
- of this software and associated documentation files (the "Software"), to deal
- in the Software without restriction, including without limitation the rights
- to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- copies of the Software, and to permit persons to whom the Software is
- furnished to do so, subject to the following conditions:
+License: PHP-3.01
+ This software consists of voluntary contributions made by many
+ individuals on behalf of the PHP Group.
  .
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
+ The PHP Group can be contacted via Email at group@php.net.
  .
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- SOFTWARE.
+ For more information on the PHP Group and the PHP project,
+ please see <http://www.php.net>.
+ .
+ This product includes PHP software, freely available from
+ <http://www.php.net/software/>.
 EOF
 
 # Changelog

@@ -6,7 +6,7 @@
   <p align="center">
     <a href="https://github.com/mameyugo/JsonQ/actions"><img src="https://github.com/mameyugo/JsonQ/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="https://packagist.org/packages/mameyugo/jsonq"><img src="https://img.shields.io/packagist/v/mameyugo/jsonq" alt="Version"></a>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-PHP--3.01-blue.svg" alt="License"></a>
     <img src="https://img.shields.io/badge/PHP-8.1%2B-8892BF.svg" alt="PHP 8.1+">
     <img src="https://img.shields.io/badge/Rust-1.75%2B-DEA584.svg" alt="Rust 1.75+">
   </p>
@@ -482,4 +482,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+The PHP License, version 3.01 — see [LICENSE](LICENSE) for details.
