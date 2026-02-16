@@ -1,0 +1,1 @@
+{"users":[{"name":"Alice","role":"admin","age":30},{"name":"Bob","role":"user","age":25},{"name":"Charlie","role":"user","age":20},{"name":"Dave","role":"guest","age":18},{"name":"Eve","role":"admin","age":35}],"meta":{"version":"1.0","region":"US"}}

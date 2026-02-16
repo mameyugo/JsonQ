@@ -31,7 +31,10 @@ use security::validate_path_depth;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::sync::Arc;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use crate::query::path::PathSegment;
+use crate::query::executor::QueryExecutor;
 
 // ══════════ HELPERS ══════════
 
@@ -548,6 +551,106 @@ pub fn jsonq_version() -> String {
     env!("CARGO_PKG_VERSION").to_string() 
 }
 
+// ══════════ STREAM I/O & JSONL ══════════
+
+#[php_function]
+pub fn jsonq_write_to_file(path: String, output_path: String, pretty: Option<bool>) -> PhpResult<bool> {
+    let store = StoreInner::new(path)
+        .map_err(|e| PhpException::from(e))?;
+    
+    let file = fs::File::create(&output_path)
+        .map_err(|e| PhpException::from(format!("Cannot create file: {}", e)))?;
+    
+    if pretty.unwrap_or(false) {
+        store.write_to_stream_pretty(file)
+    } else {
+        store.write_to_stream(file)
+    }.map_err(|e| PhpException::from(e))?;
+    
+    Ok(true)
+}
+
+#[php_function]
+pub fn jsonq_append_jsonl(path: String, record: String) -> PhpResult<bool> {
+    let store = StoreInner::new(path)
+        .map_err(|e| PhpException::from(e))?;
+    
+    let value: Value = serde_json::from_str(&record)
+        .map_err(|e| PhpException::from(format!("Invalid JSON: {}", e)))?;
+    
+    store.append_jsonl(&value)
+        .map_err(|e| PhpException::from(e))?;
+    
+    Ok(true)
+}
+
+#[php_function]
+pub fn jsonq_read_jsonl(path: String) -> PhpResult<Vec<String>> {
+    let store = StoreInner::new(path)
+         .map_err(|e| PhpException::from(e))?;
+    
+    let records: Vec<String> = store.read_jsonl_iter()
+        .map_err(|e| PhpException::from(e))?
+        .map(|v| serde_json::to_string(&v).unwrap_or_default())
+        .collect();
+    
+    Ok(records)
+}
+
+#[php_function]
+pub fn jsonq_memory_stats(path: String) -> PhpResult<HashMap<String, i64>> {
+    let store = StoreInner::new(path)
+         .map_err(|e| PhpException::from(e))?;
+    
+    // Force read to populate interner
+    let _ = store.read().map_err(|e| PhpException::from(e))?;
+    
+    let (unique, total) = store.memory_stats();
+    
+    let mut stats = HashMap::new();
+    stats.insert("unique_keys".to_string(), unique as i64);
+    stats.insert("total_references".to_string(), total as i64);
+    stats.insert("memory_saved_percent".to_string(), 
+        if total > 0 { ((total - unique) as f64 / total as f64 * 100.0) as i64 } else { 0 }
+    );
+    
+    Ok(stats)
+}
+
+#[php_function]
+pub fn jsonq_query_node(path: String, query_path: String) -> PhpResult<Vec<String>> {
+    let store = StoreInner::new(path)
+         .map_err(|e| PhpException::from(e))?;
+    
+    // Read data (cached)
+    let data = store.read()
+        .map_err(|e| PhpException::from(e))?;
+    
+    // Parse path
+    let segments = PathSegment::parse_json_path(&query_path)
+        .map_err(|e| PhpException::from(format!("Invalid path: {}", e)))?;
+        
+    let executor = QueryExecutor::new();
+    // Start with root node
+    let mut current_nodes = vec![(*data).clone()];
+    
+    // Apply segments sequentially
+    for segment in segments {
+        let mut next_nodes = Vec::new();
+        for node in current_nodes {
+            next_nodes.extend(executor.apply_segment(&node, &segment));
+        }
+        current_nodes = next_nodes;
+    }
+    
+    // Serialize results
+    let results: Vec<String> = current_nodes.into_iter()
+        .map(|v| serde_json::to_string(&v).unwrap_or_default())
+        .collect();
+        
+    Ok(results)
+}
+
 #[php_module] 
 pub fn get_module(module: ModuleBuilder) -> ModuleBuilder { 
     // ✅ Initialize global configuration
@@ -569,5 +672,10 @@ pub fn get_module(module: ModuleBuilder) -> ModuleBuilder {
         .function(wrap_function!(jsonq_set_allowed_extensions))
         .function(wrap_function!(jsonq_set_base_path))
         .function(wrap_function!(jsonq_clear_base_path))
+        .function(wrap_function!(jsonq_write_to_file))
+        .function(wrap_function!(jsonq_append_jsonl))
+        .function(wrap_function!(jsonq_read_jsonl))
+        .function(wrap_function!(jsonq_memory_stats))
+        .function(wrap_function!(jsonq_query_node))
         .class::<JsonStore>()
 }

@@ -47,6 +47,9 @@ mod fluent;
 mod operators;
 pub mod regex_safe;
 pub mod optimizer;
+pub mod path;
+pub mod executor;
+pub mod error;
 
 pub use matcher::matches;
 pub use fluent::execute_query;

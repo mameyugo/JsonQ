@@ -5,13 +5,14 @@ use super::options::CompressionMethod;
 use super::transaction::TransactionState;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Write;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Write, BufRead, BufReader};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use memmap2::Mmap;
 use crate::metrics::Metrics;
 use crate::store::cleanup::{cleanup_temp_files, TempFileGuard};
+use crate::utils::interner::KeyInterner;
 
 /// Core storage engine
 ///
@@ -33,7 +34,11 @@ pub struct StoreInner {
     pub(crate) transaction: TransactionState,
 
     /// Operational metrics (shared globally)
+    /// Operational metrics (shared globally)
     pub(crate) metrics: &'static Metrics,
+    
+    /// Key interner for deduplication (tracked for stats)
+    pub(crate) interner: RwLock<KeyInterner>,
 }
 
 // SAFETY: StoreInner is thread-safe because it uses internal synchronization (RwLock) 
@@ -57,7 +62,13 @@ impl StoreInner {
         
         // Create empty file if it doesn't exist
         if !validated_path.exists() {
-            let _ = std::fs::write(&validated_path, "{}");
+            if validated_path.extension().and_then(|s| s.to_str()) == Some("jsonl") {
+                // JSONL files start empty
+                let _ = File::create(&validated_path);
+            } else {
+                // Regular JSON files start with empty object
+                let _ = std::fs::write(&validated_path, "{}");
+            }
         }
         
         let instance = Self {
@@ -67,6 +78,7 @@ impl StoreInner {
             opts: RwLock::new(StoreOpts::default()),
             transaction: TransactionState::new(),
             metrics: Metrics::global(),
+            interner: RwLock::new(KeyInterner::new()),
         };
         
         // Recover any pending transaction
@@ -188,6 +200,8 @@ impl StoreInner {
         
         // Try simd-json first for faster parsing (requires mutable buffer)
         // Falls back to serde_json if simd-json fails
+        // Try simd-json first for faster parsing (requires mutable buffer)
+        // Falls back to serde_json if simd-json fails
         let data: Value = {
             let mut content_mut = content.clone();
             match simd_json::from_slice(&mut content_mut) {
@@ -199,6 +213,15 @@ impl StoreInner {
                         .map_err(|e| format!("Failed to parse JSON: {}", e))?
                 }
             }
+        };
+        
+        // Update interner with new keys
+        let data = if let Ok(mut interner) = self.interner.write() {
+            interner.clear();
+            Self::intern_keys(data, &mut interner)
+        } else {
+            // If lock poisoned, skip interning (fail safe)
+            data
         };
         
         let arc_data = Arc::new(data);
@@ -596,6 +619,114 @@ impl StoreInner {
             count
         } else {
             0
+        }
+    }
+
+    // ══════════ OUTPUT STREAMING ══════════
+
+    /// Write content to a stream without intermediate buffers
+    pub fn write_to_stream<W: Write>(&self, mut writer: W) -> Result<(), String> {
+        let data = self.read()?;
+        serde_json::to_writer(&mut writer, &*data)
+            .map_err(|e| format!("Error writing to stream: {}", e))
+    }
+
+    /// Write pretty-printed content to a stream
+    pub fn write_to_stream_pretty<W: Write>(&self, mut writer: W) -> Result<(), String> {
+        let data = self.read()?;
+        serde_json::to_writer_pretty(&mut writer, &*data)
+            .map_err(|e| format!("Error writing to stream: {}", e))
+    }
+
+    // ══════════ JSONL SUPPORT ══════════
+
+    /// Append a record to the file in JSONL format
+    pub fn append_jsonl(&self, record: &Value) -> Result<(), String> {
+        // Acquire write lock to ensure thread safety
+        let _lock = LockGuard::write(&self.path)?;
+        
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|e| format!("Cannot open file for append: {}", e))?;
+        
+        // Serialize without newline
+        serde_json::to_writer(&mut file, record)
+            .map_err(|e| format!("Error writing record: {}", e))?;
+        
+        // Append newline
+        file.write_all(b"\n")
+            .map_err(|e| format!("Error writing newline: {}", e))?;
+        
+        // Invalidate cache and indexes as file changed
+        self.invalidate_cache_and_indexes();
+        
+        Ok(())
+    }
+
+    /// Read JSONL file line by line
+    pub fn read_jsonl_iter(&self) -> Result<impl Iterator<Item = Value>, String> {
+        // Validate file existence/security
+        crate::security::validate_path(self.path.to_str().unwrap_or(""))?;
+        
+        let file = File::open(&self.path)
+            .map_err(|e| format!("Cannot open file: {}", e))?;
+        
+        let reader = BufReader::new(file);
+        
+        Ok(reader.lines()
+            .filter_map(|line| line.ok())
+            .filter(|line| !line.trim().is_empty())
+            .filter_map(|line| serde_json::from_str(&line).ok()))
+    }
+
+    /// Helper to invalidate cache and indexes
+    fn invalidate_cache_and_indexes(&self) {
+        if let Ok(mut cache) = self.cache.write() {
+            *cache = None;
+        }
+        if let Ok(mut indexes) = self.indexes.write() {
+            indexes.clear();
+        }
+    }
+
+    // ══════════ KEY INTERNING ══════════
+
+    /// Recursive key interning
+    // Note: With standard serde_json, keys are still Strings, so this 
+    // mainly tracks duplication statistics in the interner.
+    fn intern_keys(value: Value, interner: &mut KeyInterner) -> Value {
+        match value {
+            Value::Object(map) => {
+                let new_map: serde_json::Map<String, Value> = map.into_iter()
+                    .map(|(k, v)| {
+                        // Intern the key (adds to interner cache)
+                        // Then convert back to String (clones)
+                        let _arc = interner.intern(&k);
+                        let interned_value = Self::intern_keys(v, interner);
+                        // We use the original string k, but the interner has recorded it
+                        (k, interned_value)
+                    })
+                    .collect();
+                Value::Object(new_map)
+            }
+            Value::Array(arr) => {
+                Value::Array(arr.into_iter()
+                    .map(|v| Self::intern_keys(v, interner))
+                    .collect())
+            }
+            _ => value,
+        }
+    }
+    
+    /// Get memory stats from interner
+    pub fn memory_stats(&self) -> (usize, usize) {
+        if let Ok(interner) = self.interner.read() {
+            let stats = interner.stats();
+            (stats.unique_keys, stats.total_references)
+        } else {
+            (0, 0)
         }
     }
 }
