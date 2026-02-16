@@ -21,6 +21,7 @@ name = "jsonq"
 ext-php-rs = "0.15.6"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
+simd-json = "0.13"
 memmap2 = "0.9"
 home = "=0.5.9"
 bincode = "1.3"

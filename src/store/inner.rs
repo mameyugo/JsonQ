@@ -186,8 +186,20 @@ impl StoreInner {
             mmap.to_vec()
         };
         
-        let data: Value = serde_json::from_slice(&content)
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+        // Try simd-json first for faster parsing (requires mutable buffer)
+        // Falls back to serde_json if simd-json fails
+        let data: Value = {
+            let mut content_mut = content.clone();
+            match simd_json::from_slice(&mut content_mut) {
+                Ok(value) => value,
+                Err(_) => {
+                    // Fallback to serde_json if simd-json fails
+                    // (e.g., on unsupported architectures or malformed JSON)
+                    serde_json::from_slice(&content)
+                        .map_err(|e| format!("Failed to parse JSON: {}", e))?
+                }
+            }
+        };
         
         let arc_data = Arc::new(data);
         

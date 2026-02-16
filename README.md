@@ -372,11 +372,11 @@ JsonQ delivers **exceptional performance** for read-heavy workloads, queries, an
 
 | Operation | 100 records | 1K records | 10K records | Advantage |
 |-----------|-------------|------------|-------------|-----------|
-| **Read (cached)** | 0.058 ms | 0.522 ms | 6.063 ms | **2.0-2.2x faster** |
-| **Find (scan)** | 0.036 ms | 0.293 ms | 3.791 ms | **3.6-4.6x faster** |
-| **Find (indexed)** | 0.036 ms | 0.231 ms | 2.792 ms | **O(1) lookup** |
-| **Complex queries** | 0.151 ms | 1.143 ms | 13.865 ms | **1.3-1.8x faster** |
-| **Aggregations** | 0.013 ms | 0.032 ms | 0.821 ms | **11-38x faster** 🔥 |
+| **Read (cached)** | 0.064 ms | 0.519 ms | 6.295 ms | **1.9-2.3x faster** |
+| **Find (scan)** | 0.038 ms | 0.280 ms | 3.781 ms | **3.4-4.4x faster** |
+| **Find (indexed)** | 0.033 ms | 0.226 ms | 2.792 ms | **O(1) lookup** |
+| **Complex queries** | 0.122 ms | 1.149 ms | 13.726 ms | **1.3-1.8x faster** |
+| **Aggregations** | 0.010 ms | 0.033 ms | 0.931 ms | **13-36x faster** 🔥 |
 
 **Why JsonQ dominates here**:
 - **Zero-copy reads**: Arc-based caching eliminates repeated deserialization
@@ -389,7 +389,7 @@ JsonQ delivers **exceptional performance** for read-heavy workloads, queries, an
 
 | Operation | 100 records | 1K records | 10K records | PHP Advantage |
 |-----------|-------------|------------|-------------|---------------|
-| **Write** | 0.454 ms | 4.609 ms | 39.174 ms | **3.6-4.1x faster** |
+| **Write** | 0.514 ms | 3.871 ms | 41.023 ms | **3.4-3.8x faster** |
 
 **Why PHP is faster at writes** (and why that's okay):
 
