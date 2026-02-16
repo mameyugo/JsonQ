@@ -1,0 +1,35 @@
+site_name: JsonQ Documentation
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: orange
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - Guides:
+      - Queries: guides/queries.md
+      - Indexing: guides/indexing.md
+  - API Reference:
+      - Store Class: api/store-class.md
+  - Examples:
+      - REST API: examples/rest-api.md
+
+plugins:
+  - search
+  
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - admonition
+  - toc:
+      permalink: true
