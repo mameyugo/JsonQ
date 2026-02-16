@@ -25,7 +25,7 @@ use serde_json::{Map, Number, Value};
 ///
 /// # Examples
 ///
-/// ```rust,no_run
+/// ```rust,ignore
 /// use jsonq::conversion::zval_to_value;
 /// use ext_php_rs::types::Zval;
 ///

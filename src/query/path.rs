@@ -1,6 +1,6 @@
 use crate::query::error::QueryError;
+use crate::utils::string::suggest_similar;
 use serde_json::Value;
-// use crate::utils::string::suggest_similar;
 
 fn get_context(input: &str, position: usize) -> String {
     let start = position.saturating_sub(10);
@@ -10,10 +10,7 @@ fn get_context(input: &str, position: usize) -> String {
     format!("\n    {}\n    {}^", snippet, padding)
 }
 
-// Helper to find suggestions
-// fn find_suggestion(key: &str, candidates: &[&str]) -> Option<String> {
-//     suggest_similar(key, candidates)
-// }
+#[derive(Debug, PartialEq, Clone)]
 pub enum PathSegment {
     Key(String),
     Index(i64),
@@ -175,17 +172,40 @@ impl PathSegment {
             match chars[current_pos] {
                 '.' => {
                     current_pos += 1; // Skip dot
-                                      // Read key until next . or [
-                    let start = current_pos;
-                    while current_pos < len
-                        && chars[current_pos] != '.'
-                        && chars[current_pos] != '['
-                    {
+                    if current_pos < len && chars[current_pos] == '.' {
+                        // Recursive descent ..
                         current_pos += 1;
-                    }
-                    if start < current_pos {
-                        let key: String = chars[start..current_pos].iter().collect();
-                        segments.push(PathSegment::Key(key));
+                        let start = current_pos;
+                        while current_pos < len
+                            && chars[current_pos] != '.'
+                            && chars[current_pos] != '['
+                        {
+                            current_pos += 1;
+                        }
+                        let key: String = if start < current_pos {
+                            chars[start..current_pos].iter().collect()
+                        } else {
+                            // If just .., handle next segment
+                            "".to_string()
+                        };
+                        segments.push(PathSegment::RecursiveDescent(key));
+                    } else {
+                        // Read key until next . or [
+                        let start = current_pos;
+                        while current_pos < len
+                            && chars[current_pos] != '.'
+                            && chars[current_pos] != '['
+                        {
+                            current_pos += 1;
+                        }
+                        if start < current_pos {
+                            let key: String = chars[start..current_pos].iter().collect();
+                            if key == "*" {
+                                segments.push(PathSegment::Wildcard);
+                            } else {
+                                segments.push(PathSegment::Key(key));
+                            }
+                        }
                     }
                 }
                 '[' => {
@@ -197,13 +217,16 @@ impl PathSegment {
                     }
                     if current_pos >= len {
                         return Err(QueryError::new("Unclosed bracket", bracket_start)
+                            .with_context(get_context(input, bracket_start))
                             .with_suggestion("Add ']' to close the index/slice selector"));
                     }
                     let content: String = chars[start..current_pos].iter().collect();
                     current_pos += 1; // Skip ]
 
-                    // Determine type: Index, Slice, or MultiKey
-                    if content.contains(':') {
+                    // Determine type: Index, Slice, MultiKey, or Wildcard
+                    if content == "*" {
+                        segments.push(PathSegment::Wildcard);
+                    } else if content.contains(':') {
                         segments.push(PathSegment::parse_slice(&content).map_err(|e| {
                             QueryError::new(e.message, bracket_start)
                                 .with_context(get_context(input, bracket_start))
@@ -228,9 +251,17 @@ impl PathSegment {
                                 .trim_matches('\'')
                                 .trim_matches('"')
                                 .to_string();
-                            segments.push(PathSegment::Key(key));
+                            if key == "*" {
+                                segments.push(PathSegment::Wildcard);
+                            } else {
+                                segments.push(PathSegment::Key(key));
+                            }
                         }
                     }
+                }
+                '*' => {
+                    segments.push(PathSegment::Wildcard);
+                    current_pos += 1;
                 }
                 _ => {
                     // Start of path (no leading dot/bracket usually, or just key)
@@ -246,6 +277,8 @@ impl PathSegment {
                         // Special case: $ is root
                         if key == "$" {
                             // Skip root marker
+                        } else if key == "*" {
+                            segments.push(PathSegment::Wildcard);
                         } else {
                             segments.push(PathSegment::Key(key));
                         }

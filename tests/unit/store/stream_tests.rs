@@ -9,7 +9,10 @@ mod tests {
 
     #[test]
     fn test_append_jsonl() {
-        let tmp = NamedTempFile::new().unwrap();
+        let tmp = tempfile::Builder::new()
+            .suffix(".jsonl")
+            .tempfile()
+            .unwrap();
         let path = tmp.path().to_str().unwrap().to_string();
         let store = StoreInner::new(path.clone()).unwrap();
 
@@ -28,7 +31,10 @@ mod tests {
 
     #[test]
     fn test_read_jsonl_iter() {
-        let mut tmp = NamedTempFile::new().unwrap();
+        let mut tmp = tempfile::Builder::new()
+            .suffix(".jsonl")
+            .tempfile()
+            .unwrap();
         writeln!(tmp, "{{\"id\": 1}}").unwrap();
         writeln!(tmp, "{{\"id\": 2}}").unwrap();
         writeln!(tmp, "").unwrap(); // Empty line should be skipped
@@ -46,7 +52,10 @@ mod tests {
 
     #[test]
     fn test_write_to_stream() {
-        let tmp_src = NamedTempFile::new().unwrap();
+        let tmp_src = tempfile::Builder::new()
+            .suffix(".json")
+            .tempfile()
+            .unwrap();
         let path_src = tmp_src.path().to_str().unwrap().to_string();
         let store = StoreInner::new(path_src).unwrap();
         

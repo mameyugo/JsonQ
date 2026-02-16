@@ -3,7 +3,7 @@
 //! Provides a thread-safe cache for compiled regular expressions
 //! and enforces size limits to prevent memory exhaustion.
 
-use regex::Regex;
+use fancy_regex::Regex;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::sync::RwLock;
@@ -11,8 +11,8 @@ use std::sync::RwLock;
 /// Maximum size of the regex cache (number of patterns)
 const MAX_CACHE_SIZE: usize = 1000;
 
-/// Maximum size of a compiled regex pattern in bytes (roughly)
-const MAX_REGEX_SIZE: usize = 1024 * 1024; // 1MB
+/// Maximum backtracking limit to prevent ReDoS
+const BACKTRACK_LIMIT: usize = 100_000;
 
 /// Global regex cache
 static REGEX_CACHE: OnceLock<RwLock<HashMap<String, Regex>>> = OnceLock::new();
@@ -37,7 +37,6 @@ pub fn get_regex(pattern: &str) -> Result<Regex, String> {
             .read()
             .map_err(|e| format!("Cache lock error: {}", e))?;
         if read_guard.len() >= MAX_CACHE_SIZE {
-            // Optional: Implement LRU or just clear if full
             drop(read_guard);
             let mut write_guard = cache
                 .write()
@@ -46,9 +45,9 @@ pub fn get_regex(pattern: &str) -> Result<Regex, String> {
         }
     }
 
-    // Compile regex with size limit
-    let re = regex::RegexBuilder::new(pattern)
-        .size_limit(MAX_REGEX_SIZE)
+    // Compile regex with backtracking limit
+    let re = fancy_regex::RegexBuilder::new(pattern)
+        .backtrack_limit(BACKTRACK_LIMIT)
         .build()
         .map_err(|e| format!("Regex compilation failed: {}", e))?;
 
@@ -72,7 +71,13 @@ pub fn is_match(text: &str, pattern: &str) -> bool {
     }
 
     match get_regex(pattern) {
-        Ok(re) => re.is_match(text),
+        Ok(re) => match re.is_match(text) {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("Regex matching error for pattern '{}': {}", pattern, e);
+                false
+            }
+        },
         Err(e) => {
             tracing::warn!("Regex error for pattern '{}': {}", pattern, e);
             false

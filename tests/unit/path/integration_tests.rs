@@ -2,7 +2,6 @@
 
 use jsonq::path::{read_path, remove_path, write_path};
 use serde_json::json;
-use std::sync::Arc;
 
 #[test]
 fn test_crud_workflow() {

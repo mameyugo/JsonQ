@@ -51,7 +51,7 @@ fn test_write_and_read() {
     let (store, _temp) = temp_store();
 
     let test_data = json!({"key": "value", "number": 42});
-    store.write(Arc::new(test_data)).unwrap();
+    store.write(Arc::new(test_data.clone())).unwrap();
 
     let read_data = store.read().unwrap();
     assert_eq!(*read_data, test_data);

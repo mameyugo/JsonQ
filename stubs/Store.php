@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.2.3
+ * @version 0.3.0
  * @license The PHP License, version 3.01
  */
 
@@ -437,4 +437,19 @@ class Store
      * @return array Matching records
      */
     public function search(string $collection, string $keyword): array {}
+
+    /**
+     * Append a record to a JSONL file.
+     *
+     * @param mixed $record Data to append
+     * @return bool
+     */
+    public function appendJsonl(mixed $record): bool {}
+
+    /**
+     * Read all records from a JSONL file.
+     *
+     * @return string[] Array of JSON strings
+     */
+    public function readJsonl(): array {}
 }

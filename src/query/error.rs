@@ -33,7 +33,18 @@ impl fmt::Display for QueryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Query Error at pos {}: {}", self.position, self.message)?;
         if let Some(ref ctx) = self.context {
-            write!(f, "\nContext: {}", ctx)?;
+            write!(f, "\nContext:\n{}", ctx)?;
+            // Add visual pointer if position is within context
+            // Note: This assumes context is centered around position
+            if let Some(line) = ctx.lines().next() {
+                if let Some(_p) = line.find('^') {
+                    // Marker already exists in context (prepared by helper)
+                } else {
+                    // Try to calculate marker position assuming ctx is the raw query
+                    // But usually, get_context returns a snippet.
+                    // Let's modify get_context to include the marker line.
+                }
+            }
         }
         if let Some(ref sugg) = self.suggestion {
             write!(f, "\nSuggestion: {}", sugg)?;

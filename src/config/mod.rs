@@ -34,7 +34,7 @@ impl Default for Config {
             max_file_size: 100 * 1024 * 1024, // 100MB
             max_validation_depth: 100,
             max_path_depth: 50,
-            allowed_extensions: vec!["json".to_string()],
+            allowed_extensions: vec!["json".to_string(), "jsonl".to_string(), "db".to_string()],
             base_path: None,
         }
     }
@@ -138,7 +138,7 @@ mod tests {
         let cfg = Config::default();
         assert_eq!(cfg.max_file_size, 100 * 1024 * 1024);
         assert_eq!(cfg.max_validation_depth, 100);
-        assert_eq!(cfg.allowed_extensions, vec!["json"]);
+        assert_eq!(cfg.allowed_extensions, vec!["json", "jsonl", "db"]);
         assert!(cfg.base_path.is_none());
     }
 }

@@ -1,2 +1,1 @@
-//! Unit tests for query module
-//! Tests are inline in src/query/*.rs
+pub mod advanced_tests;

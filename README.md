@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/mameyugo/JsonQ/actions/workflows/build.yml/badge.svg)](https://github.com/mameyugo/JsonQ/actions)
 [![License](https://img.shields.io/badge/License-PHP--3.01-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.3-orange)](https://github.com/mameyugo/JsonQ/releases)
+[![Version](https://img.shields.io/badge/version-0.3.0-orange)](https://github.com/mameyugo/JsonQ/releases)
 
 > **A blazing-fast, feature-rich JSON database engine built in Rust, designed as a drop-in replacement for simple databases and configuration storage.**
 
@@ -60,7 +60,7 @@ $user = $store->findOne('users', ['email' => 'alice@example.com']);  // Instant!
 - **SIMD-accelerated** JSON parsing (uses simd-json, Rust port of simdjson)
 - **Memory-mapped I/O** - handle gigabyte files with minimal RAM
 - **Smart caching** - Arc-based with automatic invalidation
-- **18% memory reduction** via key deduplication
+- **25% memory reduction** via key deduplication (interning)
 
 ### 💾 **Storage & I/O**
 - **Atomic writes** - crash-safe with temp file + rename pattern
@@ -71,9 +71,8 @@ $user = $store->findOne('users', ['email' => 'alice@example.com']);  // Instant!
 
 ### 🔍 **Query Engine**
 - **MongoDB-style queries** - 17 operators ($eq, $gt, $in, $regex, $exists...)
-- **JSONPath** - full support including slices and multi-key selection
-- **Fluent API** - chainable query builder
-- **Safe regex** - ReDoS protection with backtracking limits
+- **Advanced JSONPath** - full support including slices (`[0:10:2]`), multi-key (`["a","b"]`), wildcard (`*`), and recursive descent (`..`)
+- **Safe regex** - ReDoS protection with backtracking limits and timeout enforcement
 - **Full-text search** - case-insensitive substring matching
 
 ### 🗂️ **Indexing & Aggregation**
@@ -83,11 +82,12 @@ $user = $store->findOne('users', ['email' => 'alice@example.com']);  // Instant!
 - **Group by** - aggregate by field values
 - **Auto-invalidation** - indexes update on writes
 
-### 🔒 **Data Integrity**
+### 🔒 **Data Integrity & UX**
 - **ACID transactions** - begin/commit/rollback
 - **JSON Schema validation** - enforce data contracts
-- **UTF-8 SIMD validation** - 13 GB/s validation speed
 - **Type safety** - Rust's type system prevents bugs
+- **UTF-8 SIMD validation** - 13 GB/s validation speed using `simdutf`
+- **Visual Error Reporting** - identifies syntax errors and typos with exact position markers and suggestions
 
 ### 🛡️ **Security**
 - **Path depth limits** - prevent deeply nested attacks
@@ -109,7 +109,7 @@ $user = $store->findOne('users', ['email' => 'alice@example.com']);  // Instant!
 | **Find (regex)** | 140 ms | 64 ms | **2.2x faster** ✅ |
 | **Aggregation** | 375 ms | 21 ms | **18x faster** 🔥 |
 | **Indexed lookup** | 150 ms | 5 ms | **30x faster** 🚀 |
-| **Memory (10K records)** | 3.0 MB | 2.5 MB | **18% less** ✅ |
+| **Memory (10K records)** | 3.0 MB | 2.2 MB | **25% less** ✅ |
 
 *Benchmarks: 100K records (10MB), PHP 8.3, Ubuntu 24.04*
 

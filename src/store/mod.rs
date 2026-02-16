@@ -30,9 +30,10 @@
 //! ```rust,no_run
 //! use jsonq::store::StoreInner;
 //! use serde_json::json;
+//! use std::sync::Arc;
 //!
 //! let store = StoreInner::new("/path/to/data.json".to_string()).unwrap();
-//! store.write(&json!({"key": "value"})).unwrap();
+//! store.write(Arc::new(json!({"key": "value"}))).unwrap();
 //! let data = store.read().unwrap();
 //! ```
 

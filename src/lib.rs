@@ -109,7 +109,24 @@ pub struct JsonStore {
 impl JsonStore {
     pub fn __construct(path: String) -> Self {
         match StoreInner::new(path) {
-            Ok(inner) => Self { inner: Some(inner) },
+            Ok(inner) => {
+                // If file exists, trigger a read to validate content (e.g. UTF-8)
+                if inner.path.exists() {
+                     match inner.read() {
+                        Ok(_) => {},
+                        Err(e) => {
+                            let _ = PhpException::new(
+                                format!("JsonQ Open Error: {}", e),
+                                0,
+                                ext_php_rs::zend::ce::exception(),
+                            )
+                            .throw();
+                            return Self { inner: None };
+                        }
+                    }
+                }
+                Self { inner: Some(inner) }
+            },
             Err(e) => {
                 let _ = PhpException::new(
                     format!("JsonQ Error: {}", e),
@@ -296,9 +313,32 @@ impl JsonStore {
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
         let data = i.read().map_err(|e| PhpException::from(e))?;
-        Ok(read_path(&data, &path)
-            .map(|v| value_to_zval(v))
-            .unwrap_or_else(Zval::new))
+
+        // Use Advanced JSONPath if path contains special selectors
+        if path.contains("..") || path.contains("*") || path.contains('[') {
+             use crate::query::path::PathSegment;
+             use crate::query::executor::QueryExecutor;
+
+             let segments = PathSegment::parse_json_path(&path).map_err(|e| {
+                 PhpException::from(format!("{}", e))
+             })?;
+             
+             let executor = QueryExecutor::new();
+             let results = executor.execute_path(&data, &segments);
+             
+             if segments.iter().any(|s| matches!(s, PathSegment::Wildcard | PathSegment::RecursiveDescent(_) | PathSegment::Slice{..})) {
+                 // Return array of results for multi-value selectors
+                 Ok(value_to_zval(&Value::Array(results)))
+             } else {
+                 // Return single value for simple paths
+                 Ok(results.first().map(|v| value_to_zval(v)).unwrap_or_else(|| Zval::new()))
+             }
+        } else {
+            // Fast path for simple dot-notation
+            Ok(read_path(&data, &path)
+                .map(|v| value_to_zval(v))
+                .unwrap_or_else(|| Zval::new()))
+        }
     }
 
     pub fn has(&self, path: String) -> PhpResult<bool> {
@@ -779,6 +819,25 @@ impl JsonStore {
         Ok(value_to_zval(
             &serde_json::to_value(snapshot).map_err(|e| e.to_string())?,
         ))
+    }
+
+    #[php(name = "appendJsonl")]
+    pub fn append_jsonl(&self, record: &Zval) -> PhpResult<bool> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let value = zval_to_value(record);
+        i.append_jsonl(&value).map_err(|e| PhpException::from(e))?;
+        Ok(true)
+    }
+
+    #[php(name = "readJsonl")]
+    pub fn read_jsonl(&self) -> PhpResult<Vec<String>> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let records: Vec<String> = i
+            .read_jsonl_iter()
+            .map_err(|e| PhpException::from(e))?
+            .map(|v| serde_json::to_string(&v).unwrap_or_default())
+            .collect();
+        Ok(records)
     }
 }
 

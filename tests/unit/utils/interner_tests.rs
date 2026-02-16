@@ -24,9 +24,9 @@ mod tests {
     fn test_interner_stats() {
         let mut interner = KeyInterner::new();
         
-        interner.intern("a");
-        interner.intern("a");
-        interner.intern("b");
+        let _s1 = interner.intern("a");
+        let _s2 = interner.intern("a");
+        let _s3 = interner.intern("b");
         
         let stats = interner.stats();
         assert_eq!(stats.unique_keys, 2);
