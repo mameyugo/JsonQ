@@ -35,9 +35,9 @@
 //! - Memory: O(n) for index storage
 
 mod builder;
-mod lookup;
 mod compound;
+mod lookup;
 
 pub use builder::IndexBuilder;
-pub use lookup::SingleIndex;
 pub use compound::CompoundIndex;
+pub use lookup::SingleIndex;

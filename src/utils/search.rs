@@ -60,15 +60,11 @@ pub fn search_in_value(value: &Value, keyword: &str) -> bool {
 fn search_recursive(value: &Value, keyword_lower: &str) -> bool {
     match value {
         Value::String(s) => s.to_lowercase().contains(keyword_lower),
-        
-        Value::Object(map) => {
-            map.values().any(|v| search_recursive(v, keyword_lower))
-        }
-        
-        Value::Array(arr) => {
-            arr.iter().any(|v| search_recursive(v, keyword_lower))
-        }
-        
+
+        Value::Object(map) => map.values().any(|v| search_recursive(v, keyword_lower)),
+
+        Value::Array(arr) => arr.iter().any(|v| search_recursive(v, keyword_lower)),
+
         // For other types (numbers, booleans, null), convert to string
         _ => value.to_string().to_lowercase().contains(keyword_lower),
     }
@@ -115,7 +111,7 @@ mod tests {
             "age": 30,
             "city": "NYC"
         });
-        
+
         assert!(search_in_value(&data, "alice"));
         assert!(search_in_value(&data, "30"));
         assert!(search_in_value(&data, "nyc"));
@@ -125,7 +121,7 @@ mod tests {
     #[test]
     fn test_search_in_array() {
         let data = json!(["apple", "banana", "cherry"]);
-        
+
         assert!(search_in_value(&data, "apple"));
         assert!(search_in_value(&data, "BANANA"));
         assert!(search_in_value(&data, "cherry"));
@@ -142,7 +138,7 @@ mod tests {
                 }
             }
         });
-        
+
         assert!(search_in_value(&data, "alice"));
         assert!(search_in_value(&data, "software"));
         assert!(search_in_value(&data, "engineer"));
@@ -157,7 +153,7 @@ mod tests {
                 {"name": "Charlie"}
             ]
         });
-        
+
         assert!(search_in_value(&data, "alice"));
         assert!(search_in_value(&data, "bob"));
         assert!(search_in_value(&data, "charlie"));
@@ -174,7 +170,7 @@ mod tests {
             "array": [1, 2, 3],
             "object": {"nested": "value"}
         });
-        
+
         assert!(search_in_value(&data, "hello"));
         assert!(search_in_value(&data, "42"));
         assert!(search_in_value(&data, "true"));
@@ -220,7 +216,7 @@ mod tests {
                 ]
             }
         });
-        
+
         assert!(search_in_value(&data, "techcorp"));
         assert!(search_in_value(&data, "engineering"));
         assert!(search_in_value(&data, "alice"));

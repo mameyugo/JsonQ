@@ -41,4 +41,4 @@ mod value_to_zval;
 mod zval_to_value;
 
 pub use value_to_zval::value_to_zval;
-pub use zval_to_value::{zval_to_value, ht_to_value};
+pub use zval_to_value::{ht_to_value, zval_to_value};

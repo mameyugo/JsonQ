@@ -13,7 +13,7 @@ use serde_json::Value;
 /// use serde_json::json;
 ///
 /// let data = json!({"user": {"name": "Alice", "age": 30}});
-/// 
+///
 /// assert_eq!(read_path(&data, "user.name"), Some(&json!("Alice")));
 /// assert_eq!(read_path(&data, "user.age"), Some(&json!(30)));
 /// assert_eq!(read_path(&data, "user.email"), None);
@@ -34,9 +34,9 @@ pub fn read_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
     if path.is_empty() {
         return Some(root);
     }
-    
+
     let mut current = root;
-    
+
     for key in path.split('.') {
         current = match current {
             Value::Object(map) => map.get(key)?,
@@ -47,7 +47,7 @@ pub fn read_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
             _ => return None,
         };
     }
-    
+
     Some(current)
 }
 
@@ -62,11 +62,11 @@ pub fn read_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
 /// use serde_json::json;
 ///
 /// let mut data = json!({"counter": 0});
-/// 
+///
 /// if let Some(counter) = read_path_mut(&mut data, "counter") {
 ///     *counter = json!(42);
 /// }
-/// 
+///
 /// assert_eq!(data["counter"], 42);
 /// ```
 pub fn read_path_mut<'a>(root: &'a mut Value, path: &str) -> Option<&'a mut Value> {
@@ -74,9 +74,9 @@ pub fn read_path_mut<'a>(root: &'a mut Value, path: &str) -> Option<&'a mut Valu
     if path.is_empty() {
         return Some(root);
     }
-    
+
     let mut current = root;
-    
+
     for key in path.split('.') {
         current = match current {
             Value::Object(map) => map.get_mut(key)?,
@@ -87,7 +87,7 @@ pub fn read_path_mut<'a>(root: &'a mut Value, path: &str) -> Option<&'a mut Valu
             _ => return None,
         };
     }
-    
+
     Some(current)
 }
 
@@ -103,7 +103,7 @@ pub fn read_path_mut<'a>(root: &'a mut Value, path: &str) -> Option<&'a mut Valu
 /// use serde_json::json;
 ///
 /// let user = json!({"profile": {"settings": {"theme": "dark"}}});
-/// 
+///
 /// // Navigate within the user object
 /// let theme = read_nested(&user, "profile.settings.theme");
 /// assert_eq!(theme, Some(&json!("dark")));
@@ -173,22 +173,22 @@ mod tests {
     #[test]
     fn test_read_path_mut_simple() {
         let mut data = json!({"counter": 0});
-        
+
         if let Some(counter) = read_path_mut(&mut data, "counter") {
             *counter = json!(42);
         }
-        
+
         assert_eq!(data["counter"], 42);
     }
 
     #[test]
     fn test_read_path_mut_nested() {
         let mut data = json!({"user": {"score": 100}});
-        
+
         if let Some(score) = read_path_mut(&mut data, "user.score") {
             *score = json!(200);
         }
-        
+
         assert_eq!(data["user"]["score"], 200);
     }
 }

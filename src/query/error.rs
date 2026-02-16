@@ -4,6 +4,7 @@ use std::fmt;
 pub struct QueryError {
     pub message: String,
     pub position: usize,
+    pub context: Option<String>,
     pub suggestion: Option<String>,
 }
 
@@ -12,6 +13,7 @@ impl QueryError {
         Self {
             message: message.into(),
             position,
+            context: None,
             suggestion: None,
         }
     }
@@ -20,11 +22,19 @@ impl QueryError {
         self.suggestion = Some(suggestion.into());
         self
     }
+
+    pub fn with_context(mut self, context: impl Into<String>) -> Self {
+        self.context = Some(context.into());
+        self
+    }
 }
 
 impl fmt::Display for QueryError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Query Error at pos {}: {}", self.position, self.message)?;
+        if let Some(ref ctx) = self.context {
+            write!(f, "\nContext: {}", ctx)?;
+        }
         if let Some(ref sugg) = self.suggestion {
             write!(f, "\nSuggestion: {}", sugg)?;
         }

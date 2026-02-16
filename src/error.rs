@@ -21,6 +21,13 @@ pub enum JsonQError {
     PathNotFound(String),
     /// Invalid operation in current state (e.g. transaction already active)
     InvalidOperation(String),
+    /// Query syntax or execution error
+    Query {
+        message: String,
+        position: usize,
+        context: Option<String>,
+        suggestion: Option<String>,
+    },
     /// General error with message
     General(String),
 }
@@ -33,6 +40,21 @@ impl fmt::Display for JsonQError {
             Self::Security(e) => write!(f, "Security Error: {}", e),
             Self::PathNotFound(p) => write!(f, "Path not found: {}", p),
             Self::InvalidOperation(e) => write!(f, "Invalid Operation: {}", e),
+            Self::Query {
+                message,
+                position: _,
+                context,
+                suggestion,
+            } => {
+                writeln!(f, "Query Error: {}", message)?;
+                if let Some(ctx) = context {
+                    writeln!(f, "Context: {}", ctx)?;
+                }
+                if let Some(sugg) = suggestion {
+                    write!(f, "Suggestion: {}", sugg)?;
+                }
+                Ok(())
+            }
             Self::General(e) => write!(f, "Error: {}", e),
         }
     }
@@ -64,7 +86,7 @@ impl JsonQError {
         PhpException::new(
             format!("JsonQ Error: {}", self),
             0,
-            ext_php_rs::zend::ce::exception()
+            ext_php_rs::zend::ce::exception(),
         )
     }
 }

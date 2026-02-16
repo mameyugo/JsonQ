@@ -49,13 +49,14 @@ impl Metrics {
     }
 
     pub fn record_latency(&self, duration: Duration) {
-        self.total_latency_ns.fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
+        self.total_latency_ns
+            .fetch_add(duration.as_nanos() as u64, Ordering::Relaxed);
     }
 
     pub fn snapshot(&self) -> MetricsSnapshot {
         let reads = self.reads.load(Ordering::Relaxed);
         let latency_ns = self.total_latency_ns.load(Ordering::Relaxed);
-        
+
         MetricsSnapshot {
             reads,
             writes: self.writes.load(Ordering::Relaxed),

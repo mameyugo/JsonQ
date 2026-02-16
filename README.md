@@ -332,6 +332,31 @@ $store->getAll();                  // Get entire data structure
 $store->clear();                   // Reset to {}
 ```
 
+### Stream I/O & JSONL
+
+For large files or log-structured data, JsonQ provides stream-based operations that bypass the global cache to save memory.
+
+```php
+// 1. Line-delimited JSON (JSONL) - Ideal for logs or massive simple datasets
+// Important: Enable .jsonl extension first
+jsonq_set_allowed_extensions("json,jsonl");
+
+// Append a record to a .jsonl file (fast, O(1))
+// Via class method (reuses existing store)
+$store = new \JsonQ\Store('events.jsonl');
+$store->appendJsonl(['id' => 123, 'event' => 'login']);
+
+// Via global function (standalone)
+jsonq_append_jsonl('events.jsonl', json_encode(['id' => 124, 'event' => 'logout']));
+
+// Read all records from .jsonl as an array of JSON strings
+$records = $store->readJsonl();
+
+// 2. Stream Export
+// Export a large store to a file without loading it entirely into PHP memory
+jsonq_write_to_file('large_store.json', 'export.json', true); // path, output, pretty
+```
+
 ## Architecture
 
 ```
@@ -374,25 +399,24 @@ $store->clear();                   // Reset to {}
 
 JsonQ delivers **exceptional performance** for read-heavy workloads, queries, and aggregations — exactly where most applications spend their time. Here's how JsonQ compares to standard PHP JSON operations (`json_encode`/`json_decode` + `file_get_contents`/`file_put_contents`):
 
-### Benchmark Results (Latest v0.2.0)
+### Benchmark Results (v0.2.1 - Advanced)
 
-**Test Environment**: PHP 8.3, Ubuntu 24.04, tested with 100 / 1K / 10K records
+**Test Environment**: PHP 8.3, Ubuntu 24.04 (Docker), 512MB RAM limit.
 
 #### 🚀 Where JsonQ Excels (SIMD-Powered)
 
-| Operation | 100 records | 1K records | 10K records | Advantage |
-|-----------|-------------|------------|-------------|-----------|
-| **Read (cached)** | 0.058 ms | 0.536 ms | 6.169 ms | **2.0-2.6x faster** |
-| **Find (scan)** | 0.053 ms | 0.353 ms | 3.834 ms | **3.6-4.3x faster** |
-| **Find (indexed)** | 0.047 ms | 0.316 ms | 3.124 ms | **O(1) lookup** |
-| **Complex queries** | 0.125 ms | 1.174 ms | 13.962 ms | **1.3-1.8x faster** |
-| **Aggregations** | 0.010 ms | 0.034 ms | 0.923 ms | **13-34x faster** 🔥 |
+| Operation | 10K records `(1MB)` | 100K records `(10MB)` | Improvement vs PHP |
+|-----------|-------------|--------------|--------------------|
+| **Read (cached)** | 6.17 ms | 58.2 ms | **2.0x faster** |
+| **Find (regex)** | 5.43 ms | 64.07 ms | **2.0-2.2x faster** |
+| **Aggregation** | 0.93 ms | 20.97 ms | **5-18x faster** 🔥 |
+| **JSONL Append** | 0.14 ms | 0.11 ms | Sub-millisecond |
 
 **Why JsonQ is a Performance Beast:**
 - **SIMD Acceleration**: Uses AVX2/SSE instructions for blazing fast JSON parsing (Phase 3).
-- **Zero-Copy Reads**: Smart Archive (Arc) caching eliminates repeated deserialization overhead.
+- **Rust-Native Regex**: Uses distinct, compiled regex engine that outperforms PHP's PCRE in loops.
+- **Zero-Copy Reads**: Smart Archive (Arc) caching eliminates repeated deserialization.
 - **Memory-Mapped I/O**: Handles large files efficiently without loading everything into RAM.
-- **Rust-Native Execution**: Complex logic runs in native machine code, bypassing PHP interpreter overhead.
 
 #### ⚖️ Write Performance Trade-off
 

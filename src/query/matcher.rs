@@ -1,8 +1,8 @@
 //! MongoDB-style pattern matching
 
-use serde_json::Value;
-use crate::path::read_path;
 use super::operators::{apply_operator, check_logical_operator};
+use crate::path::read_path;
+use serde_json::Value;
 
 /// Check if an item matches a MongoDB-style condition
 ///
@@ -68,25 +68,25 @@ pub fn matches(item: &Value, condition: &Value) -> bool {
         Some(obj) => obj,
         None => return false,
     };
-    
+
     // Check all conditions (implicit AND)
     cond_obj.iter().all(|(key, value)| {
         // Logical operators
         if key.starts_with('$') {
             return check_logical_operator(item, key, value, matches);
         }
-        
+
         // Field-based condition
         let item_value = read_path(item, key);
-        
+
         // Check if value is an operator object
         if let Some(op_obj) = value.as_object() {
             // All operators must match
-            return op_obj.iter().all(|(operator, expected)| {
-                apply_operator(item_value, operator, expected)
-            });
+            return op_obj
+                .iter()
+                .all(|(operator, expected)| apply_operator(item_value, operator, expected));
         }
-        
+
         // Simple equality
         item_value == Some(value)
     })
@@ -119,14 +119,20 @@ mod tests {
     #[test]
     fn test_matches_multiple_fields() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "name": "Alice",
-            "city": "NYC"
-        })));
-        assert!(!matches(&item, &json!({
-            "name": "Alice",
-            "city": "LA"
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "name": "Alice",
+                "city": "NYC"
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "name": "Alice",
+                "city": "LA"
+            })
+        ));
     }
 
     // Comparison operators
@@ -169,152 +175,212 @@ mod tests {
     #[test]
     fn test_matches_in() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "role": {"$in": ["admin", "viewer"]}
-        })));
-        assert!(!matches(&item, &json!({
-            "role": {"$in": ["user", "guest"]}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "role": {"$in": ["admin", "viewer"]}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "role": {"$in": ["user", "guest"]}
+            })
+        ));
     }
 
     #[test]
     fn test_matches_nin() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "role": {"$nin": ["user", "guest"]}
-        })));
-        assert!(!matches(&item, &json!({
-            "role": {"$nin": ["admin", "user"]}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "role": {"$nin": ["user", "guest"]}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "role": {"$nin": ["admin", "user"]}
+            })
+        ));
     }
 
     // String operators
     #[test]
     fn test_matches_contains() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "name": {"$contains": "lic"}
-        })));
-        assert!(!matches(&item, &json!({
-            "name": {"$contains": "Bob"}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "name": {"$contains": "lic"}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "name": {"$contains": "Bob"}
+            })
+        ));
     }
 
     #[test]
     fn test_matches_starts_with() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "name": {"$startsWith": "Ali"}
-        })));
-        assert!(!matches(&item, &json!({
-            "name": {"$startsWith": "Bob"}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "name": {"$startsWith": "Ali"}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "name": {"$startsWith": "Bob"}
+            })
+        ));
     }
 
     #[test]
     fn test_matches_ends_with() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "name": {"$endsWith": "ice"}
-        })));
-        assert!(!matches(&item, &json!({
-            "name": {"$endsWith": "Bob"}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "name": {"$endsWith": "ice"}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "name": {"$endsWith": "Bob"}
+            })
+        ));
     }
 
     // Logical operators
     #[test]
     fn test_matches_or() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "$or": [
-                {"age": {"$lt": 18}},
-                {"role": "admin"}
-            ]
-        })));
-        assert!(!matches(&item, &json!({
-            "$or": [
-                {"age": {"$lt": 18}},
-                {"role": "user"}
-            ]
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "$or": [
+                    {"age": {"$lt": 18}},
+                    {"role": "admin"}
+                ]
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "$or": [
+                    {"age": {"$lt": 18}},
+                    {"role": "user"}
+                ]
+            })
+        ));
     }
 
     #[test]
     fn test_matches_and() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "$and": [
-                {"age": {"$gte": 18}},
-                {"role": "admin"}
-            ]
-        })));
-        assert!(!matches(&item, &json!({
-            "$and": [
-                {"age": {"$lt": 18}},
-                {"role": "admin"}
-            ]
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "$and": [
+                    {"age": {"$gte": 18}},
+                    {"role": "admin"}
+                ]
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "$and": [
+                    {"age": {"$lt": 18}},
+                    {"role": "admin"}
+                ]
+            })
+        ));
     }
 
     #[test]
     fn test_matches_not() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "$not": {"role": "user"}
-        })));
-        assert!(!matches(&item, &json!({
-            "$not": {"role": "admin"}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "$not": {"role": "user"}
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "$not": {"role": "admin"}
+            })
+        ));
     }
 
     #[test]
     fn test_matches_nor() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "$nor": [
-                {"age": {"$lt": 18}},
-                {"role": "user"}
-            ]
-        })));
-        assert!(!matches(&item, &json!({
-            "$nor": [
-                {"age": {"$gte": 18}},
-                {"role": "user"}
-            ]
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "$nor": [
+                    {"age": {"$lt": 18}},
+                    {"role": "user"}
+                ]
+            })
+        ));
+        assert!(!matches(
+            &item,
+            &json!({
+                "$nor": [
+                    {"age": {"$gte": 18}},
+                    {"role": "user"}
+                ]
+            })
+        ));
     }
 
     // Complex conditions
     #[test]
     fn test_matches_complex() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "age": {"$gte": 18, "$lt": 65},
-            "role": {"$in": ["admin", "user"]},
-            "score": {"$gt": 80}
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "age": {"$gte": 18, "$lt": 65},
+                "role": {"$in": ["admin", "user"]},
+                "score": {"$gt": 80}
+            })
+        ));
     }
 
     #[test]
     fn test_matches_nested_or() {
         let item = sample_item();
-        assert!(matches(&item, &json!({
-            "$or": [
-                {
-                    "$and": [
-                        {"age": {"$lt": 18}},
-                        {"role": "user"}
-                    ]
-                },
-                {
-                    "$and": [
-                        {"age": {"$gte": 18}},
-                        {"role": "admin"}
-                    ]
-                }
-            ]
-        })));
+        assert!(matches(
+            &item,
+            &json!({
+                "$or": [
+                    {
+                        "$and": [
+                            {"age": {"$lt": 18}},
+                            {"role": "user"}
+                        ]
+                    },
+                    {
+                        "$and": [
+                            {"age": {"$gte": 18}},
+                            {"role": "admin"}
+                        ]
+                    }
+                ]
+            })
+        ));
     }
 
     #[test]
@@ -326,9 +392,12 @@ mod tests {
                 }
             }
         });
-        
-        assert!(matches(&item, &json!({
-            "user.profile.age": {"$gte": 18}
-        })));
+
+        assert!(matches(
+            &item,
+            &json!({
+                "user.profile.age": {"$gte": 18}
+            })
+        ));
     }
 }

@@ -9,9 +9,9 @@
 // mod conversion;
 use std::sync::Arc; // ⚠️ Requires PHP runtime, causes SIGSEGV
 
-mod store;
+mod index;
 mod path;
+mod query;
+mod store;
 mod utils;
 mod validation;
-mod index;
-mod query;

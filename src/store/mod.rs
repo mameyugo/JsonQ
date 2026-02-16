@@ -36,17 +36,17 @@
 //! let data = store.read().unwrap();
 //! ```
 
-pub mod options;
 pub mod cache;
-pub mod transaction;
-pub mod index_store;
-pub mod locking;
 pub mod cleanup;
+pub mod index_store;
 pub mod inner;
+pub mod locking;
+pub mod options;
+pub mod transaction;
 
-pub use options::StoreOpts;
 pub use cache::CachedData;
-pub use inner::StoreInner;
 pub use index_store::IndexStore;
-pub use transaction::TransactionState;
+pub use inner::StoreInner;
 pub use locking::LockGuard;
+pub use options::StoreOpts;
+pub use transaction::TransactionState;

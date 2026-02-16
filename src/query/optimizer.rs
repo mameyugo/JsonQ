@@ -3,8 +3,8 @@
 //! Analyzes query conditions to select the most efficient execution plan
 //! by leveraging available indexes.
 
-use serde_json::{Value, Map};
 use crate::store::inner::StoreInner;
+use serde_json::{Map, Value};
 
 /// Type of execution plan
 #[derive(Debug)]
@@ -34,7 +34,7 @@ pub fn optimize_query(inner: &StoreInner, collection: &str, conditions: &Value) 
     // Best candidate for indexing:
     // 1. Exact matches ($eq or direct value)
     // 2. $in matches (where we can union multiple index hits)
-    
+
     let indexes = inner.indexes().read().unwrap();
     let store_indices = match indexes.get(collection) {
         Some(s) => s,
@@ -46,7 +46,9 @@ pub fn optimize_query(inner: &StoreInner, collection: &str, conditions: &Value) 
     let mut min_entries = usize::MAX;
 
     for (field, condition) in cond_obj {
-        if field.starts_with('$') { continue; } // Skip logical operators for simple optimizer
+        if field.starts_with('$') {
+            continue;
+        } // Skip logical operators for simple optimizer
 
         // Direct equality or $eq
         let value = if condition.is_object() {
@@ -64,7 +66,7 @@ pub fn optimize_query(inner: &StoreInner, collection: &str, conditions: &Value) 
                 // If we have an index, estimate selectivity
                 let key = crate::utils::value_key(Some(val));
                 let count = idx.get(&key).map(|v| v.len()).unwrap_or(0);
-                
+
                 if count < min_entries {
                     min_entries = count;
                     best_field = Some(field.clone());
@@ -77,7 +79,7 @@ pub fn optimize_query(inner: &StoreInner, collection: &str, conditions: &Value) 
     if let (Some(field), Some(value)) = (best_field, best_value) {
         let mut remaining = cond_obj.clone();
         remaining.remove(&field);
-        
+
         ExecutionPlan::IndexedScan {
             collection: collection.to_string(),
             field,
@@ -119,20 +121,31 @@ mod tests {
         let dir = tempdir().unwrap();
         let path = dir.path().join("test.json");
         let path_str = path.to_str().unwrap().to_string();
-        fs::write(&path, json!({"users": [
-            {"name": "Alice", "age": 30},
-            {"name": "Bob", "age": 25}
-        ]}).to_string()).unwrap();
+        fs::write(
+            &path,
+            json!({"users": [
+                {"name": "Alice", "age": 30},
+                {"name": "Bob", "age": 25}
+            ]})
+            .to_string(),
+        )
+        .unwrap();
         let inner = StoreInner::new(path_str).unwrap();
-        
+
         // Build index
         inner.build_index("users", "name").unwrap();
 
         // Query with indexed field
         let query = json!({"name": "Alice", "age": 30});
         let plan = optimize_query(&inner, "users", &query);
-        
-        if let ExecutionPlan::IndexedScan { field, value, remaining_conditions, .. } = plan {
+
+        if let ExecutionPlan::IndexedScan {
+            field,
+            value,
+            remaining_conditions,
+            ..
+        } = plan
+        {
             assert_eq!(field, "name");
             assert_eq!(value, json!("Alice"));
             assert_eq!(remaining_conditions.len(), 1);

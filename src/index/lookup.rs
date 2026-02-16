@@ -32,27 +32,27 @@ impl SingleIndex {
             map: HashMap::new(),
         }
     }
-    
+
     /// Insert a value → positions mapping
     pub fn insert(&mut self, value: String, positions: Vec<usize>) {
         self.map.insert(value, positions);
     }
-    
+
     /// Get positions for a value
     pub fn get(&self, value: &str) -> Option<&Vec<usize>> {
         self.map.get(value)
     }
-    
+
     /// Get number of unique values in the index
     pub fn unique_count(&self) -> usize {
         self.map.len()
     }
-    
+
     /// Get total number of entries (sum of all position lists)
     pub fn total_entries(&self) -> usize {
         self.map.values().map(|v| v.len()).sum()
     }
-    
+
     /// Clear the index
     pub fn clear(&mut self) {
         self.map.clear();
@@ -80,7 +80,7 @@ mod tests {
     fn test_single_index_insert_and_get() {
         let mut index = SingleIndex::new();
         index.insert("admin".to_string(), vec![0, 2, 5]);
-        
+
         assert_eq!(index.get("admin"), Some(&vec![0, 2, 5]));
         assert_eq!(index.get("user"), None);
     }
@@ -91,7 +91,7 @@ mod tests {
         index.insert("admin".to_string(), vec![0, 2]);
         index.insert("user".to_string(), vec![1, 3, 4]);
         index.insert("guest".to_string(), vec![5]);
-        
+
         assert_eq!(index.unique_count(), 3);
         assert_eq!(index.total_entries(), 6);
     }
@@ -100,9 +100,9 @@ mod tests {
     fn test_single_index_clear() {
         let mut index = SingleIndex::new();
         index.insert("test".to_string(), vec![1, 2, 3]);
-        
+
         index.clear();
-        
+
         assert_eq!(index.unique_count(), 0);
         assert_eq!(index.get("test"), None);
     }
@@ -112,7 +112,7 @@ mod tests {
         let mut index = SingleIndex::new();
         index.insert("key".to_string(), vec![1, 2]);
         index.insert("key".to_string(), vec![3, 4]);
-        
+
         assert_eq!(index.get("key"), Some(&vec![3, 4]));
     }
 }

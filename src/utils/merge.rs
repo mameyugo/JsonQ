@@ -23,9 +23,9 @@ use serde_json::Value;
 ///
 /// let mut base = json!({"a": 1, "b": {"x": 10}});
 /// let new = json!({"b": {"y": 20}, "c": 3});
-/// 
+///
 /// merge_values(&mut base, &new);
-/// 
+///
 /// assert_eq!(base, json!({
 ///     "a": 1,
 ///     "b": {"x": 10, "y": 20},
@@ -41,7 +41,7 @@ use serde_json::Value;
 ///
 /// let mut base = json!([1, 2, 3]);
 /// let new = json!([4, 5]);
-/// 
+///
 /// merge_values(&mut base, &new);
 /// assert_eq!(base, json!([1, 2, 3, 4, 5]));
 /// ```
@@ -54,7 +54,7 @@ use serde_json::Value;
 ///
 /// let mut base = json!({"value": 42});
 /// let new = json!({"value": "text"});
-/// 
+///
 /// merge_values(&mut base, &new);
 /// assert_eq!(base["value"], "text");
 /// ```
@@ -69,12 +69,12 @@ pub fn merge_values(base: &mut Value, new: &Value) {
                     .or_insert_with(|| new_value.clone());
             }
         }
-        
+
         // Both arrays: concatenate
         (Value::Array(base_arr), Value::Array(new_arr)) => {
             base_arr.extend(new_arr.clone());
         }
-        
+
         // Different types or base is not object/array: replace
         (base, new) => {
             *base = new.clone();
@@ -140,16 +140,19 @@ mod tests {
                 "email": "alice@example.com"
             }
         });
-        
+
         merge_values(&mut base, &new);
-        
-        assert_eq!(base, json!({
-            "user": {
-                "name": "Alice",
-                "age": 30,
-                "email": "alice@example.com"
-            }
-        }));
+
+        assert_eq!(
+            base,
+            json!({
+                "user": {
+                    "name": "Alice",
+                    "age": 30,
+                    "email": "alice@example.com"
+                }
+            })
+        );
     }
 
     #[test]
@@ -168,17 +171,20 @@ mod tests {
                 }
             }
         });
-        
+
         merge_values(&mut base, &new);
-        
-        assert_eq!(base, json!({
-            "a": {
-                "b": {
-                    "c": 1,
-                    "d": 2
+
+        assert_eq!(
+            base,
+            json!({
+                "a": {
+                    "b": {
+                        "c": 1,
+                        "d": 2
+                    }
                 }
-            }
-        }));
+            })
+        );
     }
 
     #[test]
@@ -241,9 +247,9 @@ mod tests {
             "string": "world",
             "number": 99
         });
-        
+
         merge_values(&mut base, &new);
-        
+
         assert_eq!(base["string"], "world");
         assert_eq!(base["number"], 99);
         assert_eq!(base["bool"], true);
@@ -264,7 +270,7 @@ mod tests {
             },
             "features": ["auth", "api"]
         });
-        
+
         let new = json!({
             "config": {
                 "database": {
@@ -276,9 +282,9 @@ mod tests {
             },
             "features": ["websockets"]
         });
-        
+
         merge_values(&mut base, &new);
-        
+
         assert_eq!(base["config"]["database"]["host"], "localhost");
         assert_eq!(base["config"]["database"]["username"], "admin");
         assert_eq!(base["config"]["logging"]["level"], "info");
@@ -301,7 +307,7 @@ mod tests {
                 }
             }
         });
-        
+
         merge_values(&mut base, &new);
         assert_eq!(base["user"]["settings"]["theme"], "dark");
     }

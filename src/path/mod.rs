@@ -16,7 +16,7 @@
 //! use serde_json::json;
 //!
 //! let data = json!({"user": {"name": "Alice"}});
-//! 
+//!
 //! // Read
 //! let name = read_path(&data, "user.name");
 //! assert_eq!(name, Some(&json!("Alice")));
@@ -26,10 +26,10 @@
 //! write_path(&mut data, "user.name", json!("Bob"));
 //! ```
 
+pub mod navigate;
 pub mod read;
 pub mod write;
-pub mod navigate;
 
-pub use read::{read_path, read_path_mut, read_nested};
-pub use write::{write_path, remove_path};
 pub use navigate::split_path_key;
+pub use read::{read_nested, read_path, read_path_mut};
+pub use write::{remove_path, write_path};

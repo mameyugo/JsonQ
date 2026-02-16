@@ -1,5 +1,5 @@
-use serde_json::Value;
 use crate::query::path::PathSegment;
+use serde_json::Value;
 
 pub struct QueryExecutor;
 
@@ -31,13 +31,11 @@ impl QueryExecutor {
                 }
                 vec![]
             }
-            PathSegment::Wildcard => {
-                match current {
-                    Value::Array(arr) => arr.clone(),
-                    Value::Object(obj) => obj.values().cloned().collect(),
-                    _ => vec![]
-                }
-            }
+            PathSegment::Wildcard => match current {
+                Value::Array(arr) => arr.clone(),
+                Value::Object(obj) => obj.values().cloned().collect(),
+                _ => vec![],
+            },
             PathSegment::RecursiveDescent(key) => {
                 let mut results = Vec::new();
                 self.recursive_find(current, key, &mut results);
@@ -51,7 +49,7 @@ impl QueryExecutor {
                     vec![]
                 }
             }
-            
+
             PathSegment::MultiKey(keys) => {
                 if let Value::Object(obj) = current {
                     vec![segment.apply_multi_key(obj, keys)]

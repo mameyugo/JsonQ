@@ -32,15 +32,14 @@
 //! assert!(errors.is_empty());
 //! ```
 
-mod validator;
-mod types;
 mod constraints;
+mod types;
+pub mod utf8;
+mod validator;
 
-pub use validator::validate;
-pub use types::check_type;
 pub use constraints::{
-    validate_number_constraints,
+    validate_enum, validate_number_constraints, validate_required_fields,
     validate_string_constraints,
-    validate_enum,
-    validate_required_fields,
 };
+pub use types::check_type;
+pub use validator::validate;

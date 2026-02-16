@@ -1,6 +1,6 @@
 [package]
 name = "jsonq"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 authors = ["Mameyugo <info@mameyugo.com>"]
 description = "High-performance JSON file storage engine for PHP, powered by Rust"
@@ -32,6 +32,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 regex = "1.10"
 zstd = { version = "0.13", optional = true }
 flate2 = { version = "1.0", optional = true }
+simdutf = "0.7"
 
 [features]
 default = []

@@ -1,7 +1,7 @@
 //! Constraint validation functions
 
-use serde_json::Value;
 use crate::utils::as_u64;
+use serde_json::Value;
 
 /// Validate numeric constraints (min/max)
 ///
@@ -17,10 +17,11 @@ use crate::utils::as_u64;
 /// ```
 pub fn validate_number_constraints(value: &Value, schema: &Value) -> Vec<String> {
     let mut errors = Vec::new();
-    
+
     if let Some(num) = value.as_f64() {
         // Check minimum
-        if let Some(min) = schema.get("min")
+        if let Some(min) = schema
+            .get("min")
             .or_else(|| schema.get("minimum"))
             .and_then(|v| v.as_f64())
         {
@@ -28,9 +29,10 @@ pub fn validate_number_constraints(value: &Value, schema: &Value) -> Vec<String>
                 errors.push(format!("Value {} < minimum {}", num, min));
             }
         }
-        
+
         // Check maximum
-        if let Some(max) = schema.get("max")
+        if let Some(max) = schema
+            .get("max")
             .or_else(|| schema.get("maximum"))
             .and_then(|v| v.as_f64())
         {
@@ -39,7 +41,7 @@ pub fn validate_number_constraints(value: &Value, schema: &Value) -> Vec<String>
             }
         }
     }
-    
+
     errors
 }
 
@@ -57,31 +59,34 @@ pub fn validate_number_constraints(value: &Value, schema: &Value) -> Vec<String>
 /// ```
 pub fn validate_string_constraints(value: &Value, schema: &Value) -> Vec<String> {
     let mut errors = Vec::new();
-    
+
     if let Some(s) = value.as_str() {
         let len = s.len() as u64;
-        
+
         // Check minLength
         if let Some(min_len) = schema.get("minLength").and_then(as_u64) {
             if len < min_len {
                 errors.push(format!("String length {} < minLength {}", len, min_len));
             }
         }
-        
+
         // Check maxLength
         if let Some(max_len) = schema.get("maxLength").and_then(as_u64) {
             if len > max_len {
                 errors.push(format!("String length {} > maxLength {}", len, max_len));
             }
         }
-        
+
         // Check pattern (simple substring match)
         if let Some(pattern) = schema.get("pattern").and_then(|v| v.as_str()) {
             if !s.contains(pattern) {
-                errors.push(format!("Value '{}' does not match pattern '{}'", s, pattern));
+                errors.push(format!(
+                    "Value '{}' does not match pattern '{}'",
+                    s, pattern
+                ));
             }
         }
-        
+
         // Check format
         if let Some(format) = schema.get("format").and_then(|v| v.as_str()) {
             match format {
@@ -94,7 +99,7 @@ pub fn validate_string_constraints(value: &Value, schema: &Value) -> Vec<String>
             }
         }
     }
-    
+
     errors
 }
 
@@ -134,7 +139,7 @@ pub fn validate_enum(value: &Value, allowed_values: &Value) -> Option<String> {
 /// ```
 pub fn validate_required_fields(value: &Value, required: &Value) -> Vec<String> {
     let mut errors = Vec::new();
-    
+
     if let (Some(obj), Some(req_fields)) = (value.as_object(), required.as_array()) {
         for field in req_fields {
             if let Some(field_name) = field.as_str() {
@@ -144,7 +149,7 @@ pub fn validate_required_fields(value: &Value, required: &Value) -> Vec<String> 
             }
         }
     }
-    
+
     errors
 }
 

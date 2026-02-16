@@ -18,7 +18,7 @@ pub fn split_path_key(path: &str) -> (&str, &str) {
     if path.is_empty() {
         return ("", "");
     }
-    
+
     if let Some(pos) = path.rfind('.') {
         (&path[..pos], &path[pos + 1..])
     } else {

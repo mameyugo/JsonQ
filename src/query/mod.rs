@@ -42,15 +42,15 @@
 //! let results = execute_query(&collection, &query);
 //! ```
 
-mod matcher;
+pub mod error;
+pub mod executor;
 mod fluent;
+mod matcher;
 mod operators;
-pub mod regex_safe;
 pub mod optimizer;
 pub mod path;
-pub mod executor;
-pub mod error;
+pub mod regex_safe;
 
-pub use matcher::matches;
 pub use fluent::execute_query;
+pub use matcher::matches;
 pub use operators::{apply_operator, check_logical_operator};

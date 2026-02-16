@@ -14,6 +14,9 @@ $sizes = [10_000, 100_000];
 
 // ── Helpers ──
 
+// Allow .jsonl
+jsonq_set_allowed_extensions("json,jsonl");
+
 function generate_users(int $count): array {
     $roles  = ['admin', 'user', 'viewer', 'editor', 'moderator'];
     $users  = [];
@@ -37,7 +40,11 @@ function bench(string $label, callable $fn, int $iterations = 100): float {
 
     $start = hrtime(true);
     // For very slow ops, reduce iterations dynamically if needed, but let's stick to fixed for consistency
-    for ($i = 0; $i < $iterations; $i++) $fn();
+    for ($i = 0; $i < $iterations; $i++) {
+        $fn();
+        if ($iterations < 100) echo ".";
+    }
+    echo " ";
     $elapsed = (hrtime(true) - $start) / 1e6; // ms
     $per_op = $elapsed / $iterations;
 
@@ -60,8 +67,8 @@ foreach ($sizes as $size) {
 
     $users = generate_users($size);
     // Adjust iterations based on size
-    $iterations = max(5, (int)(10000 / ($size / 1000))); // e.g. 10K -> 1000 iters? No, 10000/10 = 1000. 100K -> 100.
-    if ($size >= 100_000) $iterations = 20;
+    $iterations = 5; // Default low
+    if ($size >= 100_000) $iterations = 1;
 
     // File paths
     $jsonqPath = "/tmp/jsonq_bench_{$size}.json";
@@ -106,7 +113,7 @@ foreach ($sizes as $size) {
     touch($phpJsonl);
 
     $rl = bench("JsonQ jsonq_append_jsonl", function() use ($jsonlPath, $line) {
-        jsonq_append_jsonl($jsonlPath, $line);
+        jsonq_append_jsonl($jsonlPath, json_encode($line));
     }, $iterations * 10);
 
     $pl = bench("PHP file_put_contents(FILE_APPEND)", function() use ($phpJsonl, $line) {

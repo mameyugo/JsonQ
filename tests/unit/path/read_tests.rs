@@ -1,8 +1,8 @@
 //! Tests for path reading functions
 
-use jsonq::path::{read_path, read_path_mut, read_nested};
-use std::sync::Arc;
+use jsonq::path::{read_nested, read_path, read_path_mut};
 use serde_json::json;
+use std::sync::Arc;
 
 #[test]
 fn test_read_root_with_empty_path() {
@@ -26,7 +26,10 @@ fn test_read_nested_object() {
         }
     });
     assert_eq!(read_path(&data, "user.name"), Some(&json!("Bob")));
-    assert_eq!(read_path(&data, "user.email"), Some(&json!("bob@example.com")));
+    assert_eq!(
+        read_path(&data, "user.email"),
+        Some(&json!("bob@example.com"))
+    );
 }
 
 #[test]
@@ -40,7 +43,10 @@ fn test_read_deeply_nested() {
             }
         }
     });
-    assert_eq!(read_path(&data, "level1.level2.level3.value"), Some(&json!(42)));
+    assert_eq!(
+        read_path(&data, "level1.level2.level3.value"),
+        Some(&json!(42))
+    );
 }
 
 #[test]
@@ -99,11 +105,11 @@ fn test_read_through_non_object() {
 #[test]
 fn test_read_path_mut_basic() {
     let mut data = json!({"counter": 10});
-    
+
     if let Some(counter) = read_path_mut(&mut data, "counter") {
         *counter = json!(20);
     }
-    
+
     assert_eq!(data["counter"], 20);
 }
 
@@ -114,22 +120,22 @@ fn test_read_path_mut_nested() {
             "score": 100
         }
     });
-    
+
     if let Some(score) = read_path_mut(&mut data, "user.score") {
         *score = json!(150);
     }
-    
+
     assert_eq!(data["user"]["score"], 150);
 }
 
 #[test]
 fn test_read_path_mut_array() {
     let mut data = json!({"items": [1, 2, 3]});
-    
+
     if let Some(item) = read_path_mut(&mut data, "items.1") {
         *item = json!(99);
     }
-    
+
     assert_eq!(data["items"][1], 99);
 }
 
@@ -142,7 +148,7 @@ fn test_read_nested_alias() {
             }
         }
     });
-    
+
     let theme = read_nested(&user, "profile.settings.theme");
     assert_eq!(theme, Some(&json!("dark")));
 }
@@ -168,7 +174,7 @@ fn test_read_complex_structure() {
             ]
         }
     });
-    
+
     assert_eq!(
         read_path(&data, "company.departments.0.employees.1.name"),
         Some(&json!("Bob"))
@@ -186,7 +192,7 @@ fn test_read_various_types() {
         "array": [1, 2, 3],
         "object": {"nested": "value"}
     });
-    
+
     assert_eq!(read_path(&data, "string"), Some(&json!("hello")));
     assert_eq!(read_path(&data, "number"), Some(&json!(42)));
     assert_eq!(read_path(&data, "float"), Some(&json!(3.14)));

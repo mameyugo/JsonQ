@@ -32,9 +32,7 @@ pub fn check_type(value: &Value, expected_type: &str) -> bool {
         "number" => value.is_number(),
         "integer" => {
             // Must be a number with no fractional part
-            value.is_number() && value.as_f64()
-                .map(|f| f.fract() == 0.0)
-                .unwrap_or(false)
+            value.is_number() && value.as_f64().map(|f| f.fract() == 0.0).unwrap_or(false)
         }
         "boolean" => value.is_boolean(),
         "array" => value.is_array(),

@@ -37,7 +37,9 @@ impl KeyInterner {
             unique_keys: self.cache.len(),
             // Arc::strong_count includes the reference in the map itself
             // So total references in use externally = strong_count - 1
-            total_references: self.cache.values()
+            total_references: self
+                .cache
+                .values()
                 .map(|arc| Arc::strong_count(arc).saturating_sub(1))
                 .sum(),
         }

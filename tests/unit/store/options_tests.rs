@@ -1,6 +1,6 @@
 //! Tests for StoreOpts
 
-use jsonq::store::options::{StoreOpts, CompressionMethod};
+use jsonq::store::options::{CompressionMethod, StoreOpts};
 use std::sync::Arc;
 
 #[test]

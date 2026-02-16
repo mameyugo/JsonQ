@@ -15,7 +15,7 @@ pub enum CompressionMethod {
 pub struct StoreOpts {
     /// Pretty-print JSON output (slower writes, easier debugging)
     pub pretty: bool,
-    
+
     /// Force fsync after writes (slower, guaranteed durability)
     pub fsync: bool,
 
@@ -26,8 +26,8 @@ pub struct StoreOpts {
 impl Default for StoreOpts {
     fn default() -> Self {
         Self {
-            pretty: false,  // Compact JSON by default (faster)
-            fsync: false,   // Skip fsync by default (faster)
+            pretty: false, // Compact JSON by default (faster)
+            fsync: false,  // Skip fsync by default (faster)
             compression: CompressionMethod::None,
         }
     }
@@ -42,7 +42,7 @@ impl StoreOpts {
             compression: CompressionMethod::None,
         }
     }
-    
+
     /// Create options optimized for development (readable, safe)
     pub fn development() -> Self {
         Self {
@@ -51,7 +51,7 @@ impl StoreOpts {
             compression: CompressionMethod::None,
         }
     }
-    
+
     /// Create options for maximum safety (slow but durable)
     pub fn safe() -> Self {
         Self {

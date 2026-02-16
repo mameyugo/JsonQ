@@ -1,0 +1,23 @@
+{
+    "name": "mameyugo/jsonq",
+    "type": "extension",
+    "description": "High-performance JSON file storage engine for PHP, powered by Rust",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mameyugo",
+            "email": "info@mameyugo.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/mameyugo/JsonQ/issues",
+        "source": "https://github.com/mameyugo/JsonQ",
+        "docs": "https://github.com/mameyugo/JsonQ/blob/main/docs/API.md"
+    },
+    "funding": [
+        {
+            "type": "github",
+            "url": "https://github.com/sponsors/mameyugo"
+        }
+    ]
+}

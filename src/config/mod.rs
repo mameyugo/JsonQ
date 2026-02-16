@@ -2,8 +2,8 @@
 
 pub mod php_ini;
 
-use std::sync::RwLock;
 use std::path::PathBuf;
+use std::sync::RwLock;
 
 /// Global configuration singleton
 static CONFIG: RwLock<Option<Config>> = RwLock::new(None);
@@ -13,16 +13,16 @@ static CONFIG: RwLock<Option<Config>> = RwLock::new(None);
 pub struct Config {
     /// Maximum file size in bytes (default: 100MB)
     pub max_file_size: u64,
-    
+
     /// Maximum validation depth (default: 100)
     pub max_validation_depth: usize,
-    
+
     /// Maximum path depth for dot notation (default: 50)
     pub max_path_depth: usize,
-    
+
     /// Allowed file extensions (default: ["json"])
     pub allowed_extensions: Vec<String>,
-    
+
     /// Base path - files must be within this directory
     /// None = no restriction (default)
     pub base_path: Option<PathBuf>,
@@ -31,7 +31,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            max_file_size: 100 * 1024 * 1024,  // 100MB
+            max_file_size: 100 * 1024 * 1024, // 100MB
             max_validation_depth: 100,
             max_path_depth: 50,
             allowed_extensions: vec!["json".to_string()],
@@ -51,22 +51,22 @@ impl Config {
             }
         });
     }
-    
+
     /// Get current configuration (read-only)
     pub fn get() -> Config {
-        CONFIG.read()
+        CONFIG
+            .read()
             .map(|opt| opt.clone().unwrap_or_default())
             .unwrap_or_else(|_| Config::default())
     }
-    
+
     /// Update configuration
     pub fn update<F>(f: F)
     where
         F: FnOnce(&mut Config),
     {
-        let mut config = CONFIG.write()
-            .unwrap_or_else(|e| e.into_inner()); // Recover from poisoned lock for config updates
-        
+        let mut config = CONFIG.write().unwrap_or_else(|e| e.into_inner()); // Recover from poisoned lock for config updates
+
         if let Some(cfg) = config.as_mut() {
             f(cfg);
         } else {
@@ -75,32 +75,33 @@ impl Config {
             *config = Some(new_config);
         }
     }
-    
+
     /// Parse file size string (e.g., "50M", "1G", "500K")
     pub fn parse_size(s: &str) -> Result<u64, String> {
         let s = s.trim().to_uppercase();
-        
+
         if s.is_empty() {
             return Err("Empty size string".to_string());
         }
-        
+
         let (num_part, suffix) = if s.ends_with('G') {
-            (&s[..s.len()-1], 1024 * 1024 * 1024)
+            (&s[..s.len() - 1], 1024 * 1024 * 1024)
         } else if s.ends_with('M') {
-            (&s[..s.len()-1], 1024 * 1024)
+            (&s[..s.len() - 1], 1024 * 1024)
         } else if s.ends_with('K') {
-            (&s[..s.len()-1], 1024)
+            (&s[..s.len() - 1], 1024)
         } else if s.ends_with('B') {
-            (&s[..s.len()-1], 1)
+            (&s[..s.len() - 1], 1)
         } else {
             (s.as_str(), 1)
         };
-        
-        num_part.parse::<u64>()
+
+        num_part
+            .parse::<u64>()
             .map(|n| n * suffix)
             .map_err(|e| format!("Invalid size format: {}", e))
     }
-    
+
     /// Parse comma-separated extensions
     pub fn parse_extensions(s: &str) -> Vec<String> {
         s.split(',')
@@ -127,7 +128,7 @@ mod tests {
     fn test_parse_extensions() {
         let exts = Config::parse_extensions("json, db, data");
         assert_eq!(exts, vec!["json", "db", "data"]);
-        
+
         let exts = Config::parse_extensions("JSON,DB");
         assert_eq!(exts, vec!["json", "db"]);
     }

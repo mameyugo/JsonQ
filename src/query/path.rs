@@ -1,23 +1,34 @@
-use serde_json::Value;
 use crate::query::error::QueryError;
+use serde_json::Value;
+// use crate::utils::string::suggest_similar;
 
-#[derive(Debug, Clone)]
+fn get_context(input: &str, position: usize) -> String {
+    let start = position.saturating_sub(10);
+    let end = (position + 10).min(input.len());
+    let snippet = &input[start..end];
+    let padding = " ".repeat(position - start);
+    format!("\n    {}\n    {}^", snippet, padding)
+}
+
+// Helper to find suggestions
+// fn find_suggestion(key: &str, candidates: &[&str]) -> Option<String> {
+//     suggest_similar(key, candidates)
+// }
 pub enum PathSegment {
     Key(String),
     Index(i64),
     Wildcard,
     RecursiveDescent(String),
-    
+
     // Advanced Slice
     Slice {
         start: Option<i64>,
         end: Option<i64>,
         step: Option<i64>,
     },
-    
+
     // Multi-key selection
     MultiKey(Vec<String>),
-    
     // Placeholder for filter (Phase 3.3)
     // Filter(FilterExpr),
 }
@@ -29,9 +40,10 @@ impl PathSegment {
     /// Examples: [0:10:2], [::3], [5:], [:10], [:-1]
     pub fn parse_slice(input: &str) -> Result<Self, QueryError> {
         let parts: Vec<&str> = input.split(':').collect();
-        
+
         if parts.len() > 3 {
             return Err(QueryError::new("Invalid slice: too many colons", 0)
+                .with_context(format!("Input: {}", input))
                 .with_suggestion("Slice format is [start:end:step]"));
         }
 
@@ -75,17 +87,24 @@ impl PathSegment {
             }
         };
 
-        let start_idx = start.map(normalize).unwrap_or(if step > 0 { 0 } else { (len - 1) as usize });
-        let end_idx = end.map(normalize).unwrap_or(if step > 0 { len as usize } else { 0 }); // Wait, end for reverse default?
-        // Logic for reverse slice defaulting is tricky in Python.
-        // Usually [::-1] means start at end, end at beginning.
-        
+        let _start_idx =
+            start
+                .map(normalize)
+                .unwrap_or(if step > 0 { 0 } else { (len - 1) as usize });
+        let _end_idx = end
+            .map(normalize)
+            .unwrap_or(if step > 0 { len as usize } else { 0 }); // Wait, end for reverse default?
+                                                                 // Logic for reverse slice defaulting is tricky in Python.
+                                                                 // Usually [::-1] means start at end, end at beginning.
+
         // Let's use simple logic for now matching guide
         let start_idx = start.map(normalize).unwrap_or(0);
         let end_idx = end.map(normalize).unwrap_or(len as usize);
 
         if step > 0 {
-            if start_idx >= end_idx { return vec![]; }
+            if start_idx >= end_idx {
+                return vec![];
+            }
             array[start_idx..end_idx]
                 .iter()
                 .step_by(step as usize)
@@ -99,20 +118,30 @@ impl PathSegment {
             // This assumes start_idx < end_idx, but we reverse it?
             // If I want [5:0:-1], start=5, end=0.
             // If start=5, end=0, range 5..0 is empty in Rust.
-            
+
             // Guide implementation:
             // array[start_idx..end_idx].iter().rev()
             // This implies start_idx < end_idx in the slice range, but we iterate backwards?
             // This is not correct for [5:0:-1].
-            
+
             // I will implement a safer generic iter.
             let mut res = Vec::new();
-            let mut curr = if let Some(s) = start { normalize(s) } else { (len - 1) as usize } as i64;
-            let stop = if let Some(e) = end { normalize(e) as i64 } else { -1 };
-            
+            let mut curr = if let Some(s) = start {
+                normalize(s)
+            } else {
+                (len - 1) as usize
+            } as i64;
+            let stop = if let Some(e) = end {
+                normalize(e) as i64
+            } else {
+                -1
+            };
+
             // Safety check
-            if curr >= len { curr = len - 1; }
-            
+            if curr >= len {
+                curr = len - 1;
+            }
+
             while curr > stop && curr >= 0 {
                 if curr < len {
                     if let Some(v) = array.get(curr as usize) {
@@ -144,23 +173,23 @@ impl PathSegment {
     /// Apply multi-key to an object
     pub fn apply_multi_key(&self, obj: &serde_json::Map<String, Value>, keys: &[String]) -> Value {
         let mut result = serde_json::Map::new();
-        
+
         for key in keys {
             if let Some(value) = obj.get(key) {
                 result.insert(key.clone(), value.clone());
             }
         }
-        
+
         Value::Object(result)
     }
 
     /// Parse a full JSONPath string into segments
-    /// Examples: 
+    /// Examples:
     /// "users.0.name"
     /// "users[0:10].name"
     /// "items[\"key1\",\"key2\"]"
     /// Parse a full JSONPath string into segments
-    /// Examples: 
+    /// Examples:
     /// "users.0.name"
     /// "users[0:10].name"
     /// "items[\"key1\",\"key2\"]"
@@ -174,9 +203,12 @@ impl PathSegment {
             match chars[current_pos] {
                 '.' => {
                     current_pos += 1; // Skip dot
-                    // Read key until next . or [
+                                      // Read key until next . or [
                     let start = current_pos;
-                    while current_pos < len && chars[current_pos] != '.' && chars[current_pos] != '[' {
+                    while current_pos < len
+                        && chars[current_pos] != '.'
+                        && chars[current_pos] != '['
+                    {
                         current_pos += 1;
                     }
                     if start < current_pos {
@@ -200,26 +232,41 @@ impl PathSegment {
 
                     // Determine type: Index, Slice, or MultiKey
                     if content.contains(':') {
-                        segments.push(PathSegment::parse_slice(&content)
-                            .map_err(|e| QueryError::new(e.message, bracket_start).with_suggestion("Check slice syntax [start:end:step]"))?);
-                    } else if content.contains(',') || content.contains('"') || content.contains('\'') {
-                        segments.push(PathSegment::parse_multi_key(&content)
-                             .map_err(|e| QueryError::new(e.message, bracket_start))?);
+                        segments.push(PathSegment::parse_slice(&content).map_err(|e| {
+                            QueryError::new(e.message, bracket_start)
+                                .with_context(get_context(input, bracket_start))
+                                .with_suggestion("Check slice syntax [start:end:step]")
+                        })?);
+                    } else if content.contains(',')
+                        || content.contains('"')
+                        || content.contains('\'')
+                    {
+                        segments.push(PathSegment::parse_multi_key(&content).map_err(|e| {
+                            QueryError::new(e.message, bracket_start)
+                                .with_context(get_context(input, bracket_start))
+                        })?);
                     } else {
                         // Index or simple key inside brackets ["key"]
                         if let Ok(idx) = content.trim().parse::<i64>() {
                             segments.push(PathSegment::Index(idx));
                         } else {
-                             // Treat as key if wrapped in quotes, or if it looks like a string
-                             let key = content.trim().trim_matches('\'').trim_matches('"').to_string();
-                             segments.push(PathSegment::Key(key));
+                            // Treat as key if wrapped in quotes, or if it looks like a string
+                            let key = content
+                                .trim()
+                                .trim_matches('\'')
+                                .trim_matches('"')
+                                .to_string();
+                            segments.push(PathSegment::Key(key));
                         }
                     }
                 }
                 _ => {
                     // Start of path (no leading dot/bracket usually, or just key)
                     let start = current_pos;
-                    while current_pos < len && chars[current_pos] != '.' && chars[current_pos] != '[' {
+                    while current_pos < len
+                        && chars[current_pos] != '.'
+                        && chars[current_pos] != '['
+                    {
                         current_pos += 1;
                     }
                     if start < current_pos {
@@ -231,13 +278,13 @@ impl PathSegment {
                             segments.push(PathSegment::Key(key));
                         }
                     } else {
-                         // Stuck?
-                         current_pos += 1;
+                        // Stuck?
+                        current_pos += 1;
                     }
                 }
             }
         }
-        
+
         Ok(segments)
     }
 }

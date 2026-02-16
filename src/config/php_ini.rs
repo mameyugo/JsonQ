@@ -14,7 +14,7 @@ pub fn load_from_ini() {
             });
         }
     }
-    
+
     // Load max_validation_depth
     if let Some(depth) = Ini::get::<i64>("jsonq.max_validation_depth") {
         if depth > 0 {
@@ -23,7 +23,7 @@ pub fn load_from_ini() {
             });
         }
     }
-    
+
     // Load max_path_depth
     if let Some(depth) = Ini::get::<i64>("jsonq.max_path_depth") {
         if depth > 0 {
@@ -32,7 +32,7 @@ pub fn load_from_ini() {
             });
         }
     }
-    
+
     // Load allowed_extensions
     if let Some(exts_str) = Ini::get::<String>("jsonq.allowed_extensions") {
         let exts = Config::parse_extensions(&exts_str);

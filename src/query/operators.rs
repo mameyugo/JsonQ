@@ -38,43 +38,27 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
     match operator {
         "$eq" => item_value == Some(expected),
         "$ne" => item_value != Some(expected),
-        
-        "$gt" => {
-            item_value.and_then(|v| v.as_f64())
-                > expected.as_f64()
-        }
-        
-        "$gte" => {
-            item_value.and_then(|v| v.as_f64())
-                >= expected.as_f64()
-        }
-        
-        "$lt" => {
-            item_value.and_then(|v| v.as_f64())
-                < expected.as_f64()
-        }
-        
-        "$lte" => {
-            item_value.and_then(|v| v.as_f64())
-                <= expected.as_f64()
-        }
-        
-        "$in" => {
-            expected.as_array()
-                .map(|arr| arr.contains(item_value.unwrap_or(&Value::Null)))
-                .unwrap_or(false)
-        }
-        
-        "$nin" => {
-            !expected.as_array()
-                .map(|arr| arr.contains(item_value.unwrap_or(&Value::Null)))
-                .unwrap_or(true)
-        }
-        
-        "$exists" => {
-            expected.as_bool() == Some(item_value.is_some())
-        }
-        
+
+        "$gt" => item_value.and_then(|v| v.as_f64()) > expected.as_f64(),
+
+        "$gte" => item_value.and_then(|v| v.as_f64()) >= expected.as_f64(),
+
+        "$lt" => item_value.and_then(|v| v.as_f64()) < expected.as_f64(),
+
+        "$lte" => item_value.and_then(|v| v.as_f64()) <= expected.as_f64(),
+
+        "$in" => expected
+            .as_array()
+            .map(|arr| arr.contains(item_value.unwrap_or(&Value::Null)))
+            .unwrap_or(false),
+
+        "$nin" => !expected
+            .as_array()
+            .map(|arr| arr.contains(item_value.unwrap_or(&Value::Null)))
+            .unwrap_or(true),
+
+        "$exists" => expected.as_bool() == Some(item_value.is_some()),
+
         "$regex" => {
             let pattern = expected.as_str().unwrap_or("");
             item_value
@@ -82,7 +66,7 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
                 .map(|s| crate::query::regex_safe::is_match(s, pattern))
                 .unwrap_or(false)
         }
-        
+
         "$contains" => {
             let pattern = expected.as_str().unwrap_or("");
             item_value
@@ -90,7 +74,7 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
                 .map(|s| s.contains(pattern))
                 .unwrap_or(false)
         }
-        
+
         "$startsWith" => {
             let prefix = expected.as_str().unwrap_or("");
             item_value
@@ -98,7 +82,7 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
                 .map(|s| s.starts_with(prefix))
                 .unwrap_or(false)
         }
-        
+
         "$endsWith" => {
             let suffix = expected.as_str().unwrap_or("");
             item_value
@@ -106,7 +90,7 @@ pub fn apply_operator(item_value: Option<&Value>, operator: &str, expected: &Val
                 .map(|s| s.ends_with(suffix))
                 .unwrap_or(false)
         }
-        
+
         _ => false, // Unknown operator
     }
 }
@@ -138,28 +122,23 @@ where
     F: Fn(&Value, &Value) -> bool,
 {
     match operator {
-        "$or" => {
-            conditions.as_array()
-                .map(|arr| arr.iter().any(|cond| matcher(item, cond)))
-                .unwrap_or(false)
-        }
-        
-        "$and" => {
-            conditions.as_array()
-                .map(|arr| arr.iter().all(|cond| matcher(item, cond)))
-                .unwrap_or(false)
-        }
-        
-        "$nor" => {
-            !conditions.as_array()
-                .map(|arr| arr.iter().any(|cond| matcher(item, cond)))
-                .unwrap_or(true)
-        }
-        
-        "$not" => {
-            !matcher(item, conditions)
-        }
-        
+        "$or" => conditions
+            .as_array()
+            .map(|arr| arr.iter().any(|cond| matcher(item, cond)))
+            .unwrap_or(false),
+
+        "$and" => conditions
+            .as_array()
+            .map(|arr| arr.iter().all(|cond| matcher(item, cond)))
+            .unwrap_or(false),
+
+        "$nor" => !conditions
+            .as_array()
+            .map(|arr| arr.iter().any(|cond| matcher(item, cond)))
+            .unwrap_or(true),
+
+        "$not" => !matcher(item, conditions),
+
         _ => false,
     }
 }
@@ -236,26 +215,58 @@ mod tests {
     // String operators
     #[test]
     fn test_contains_operator() {
-        assert!(apply_operator(Some(&json!("hello world")), "$contains", &json!("world")));
-        assert!(!apply_operator(Some(&json!("hello")), "$contains", &json!("world")));
+        assert!(apply_operator(
+            Some(&json!("hello world")),
+            "$contains",
+            &json!("world")
+        ));
+        assert!(!apply_operator(
+            Some(&json!("hello")),
+            "$contains",
+            &json!("world")
+        ));
     }
 
     #[test]
     fn test_regex_operator() {
-        assert!(apply_operator(Some(&json!("test@example.com")), "$regex", &json!("@")));
-        assert!(!apply_operator(Some(&json!("invalid")), "$regex", &json!("@")));
+        assert!(apply_operator(
+            Some(&json!("test@example.com")),
+            "$regex",
+            &json!("@")
+        ));
+        assert!(!apply_operator(
+            Some(&json!("invalid")),
+            "$regex",
+            &json!("@")
+        ));
     }
 
     #[test]
     fn test_starts_with_operator() {
-        assert!(apply_operator(Some(&json!("hello world")), "$startsWith", &json!("hello")));
-        assert!(!apply_operator(Some(&json!("world hello")), "$startsWith", &json!("hello")));
+        assert!(apply_operator(
+            Some(&json!("hello world")),
+            "$startsWith",
+            &json!("hello")
+        ));
+        assert!(!apply_operator(
+            Some(&json!("world hello")),
+            "$startsWith",
+            &json!("hello")
+        ));
     }
 
     #[test]
     fn test_ends_with_operator() {
-        assert!(apply_operator(Some(&json!("hello world")), "$endsWith", &json!("world")));
-        assert!(!apply_operator(Some(&json!("world hello")), "$endsWith", &json!("world")));
+        assert!(apply_operator(
+            Some(&json!("hello world")),
+            "$endsWith",
+            &json!("world")
+        ));
+        assert!(!apply_operator(
+            Some(&json!("world hello")),
+            "$endsWith",
+            &json!("world")
+        ));
     }
 
     #[test]

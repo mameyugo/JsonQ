@@ -1,6 +1,6 @@
 //! Path writing and removal functions
 
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 
 /// Write value at path, creating intermediate objects/arrays as needed
 ///
@@ -15,7 +15,7 @@ use serde_json::{Value, Map};
 /// use serde_json::json;
 ///
 /// let mut data = json!({});
-/// 
+///
 /// // Creates nested objects automatically
 /// write_path(&mut data, "user.name", json!("Alice"));
 /// assert_eq!(data["user"]["name"], "Alice");
@@ -34,7 +34,7 @@ use serde_json::{Value, Map};
 pub fn write_path(root: &mut Value, path: &str, value: Value) {
     let keys: Vec<&str> = path.split('.').collect();
     let mut current = root;
-    
+
     for (i, &key) in keys.iter().enumerate() {
         // Last key - write the value
         if i == keys.len() - 1 {
@@ -59,12 +59,13 @@ pub fn write_path(root: &mut Value, path: &str, value: Value) {
             }
             return;
         }
-        
+
         // Intermediate key - navigate or create
-        let next_is_numeric = keys.get(i + 1)
+        let next_is_numeric = keys
+            .get(i + 1)
             .and_then(|k| k.parse::<usize>().ok())
             .is_some();
-        
+
         match current {
             Value::Object(map) => {
                 if !map.contains_key(key) {
@@ -104,10 +105,10 @@ pub fn write_path(root: &mut Value, path: &str, value: Value) {
 /// use serde_json::json;
 ///
 /// let mut data = json!({"user": {"name": "Alice", "age": 30}});
-/// 
+///
 /// assert_eq!(remove_path(&mut data, "user.age"), true);
 /// assert_eq!(data["user"].get("age"), None);
-/// 
+///
 /// assert_eq!(remove_path(&mut data, "nonexistent"), false);
 /// ```
 ///
@@ -117,21 +118,21 @@ pub fn write_path(root: &mut Value, path: &str, value: Value) {
 /// elements shift down (indices change).
 pub fn remove_path(root: &mut Value, path: &str) -> bool {
     let mut keys: Vec<&str> = path.split('.').collect();
-    
+
     if keys.is_empty() {
         return false;
     }
-    
+
     let last_key = keys.pop().unwrap();
     let parent_path = keys.join(".");
-    
+
     // Get parent (create temporary scope for borrow)
     let parent = if parent_path.is_empty() {
         Some(root)
     } else {
         super::read::read_path_mut(root, &parent_path)
     };
-    
+
     if let Some(target) = parent {
         match target {
             Value::Object(map) => map.remove(last_key).is_some(),
@@ -195,7 +196,7 @@ mod tests {
     fn test_write_array_with_gaps() {
         let mut data = json!({"items": []});
         write_path(&mut data, "items.3", json!("fourth"));
-        
+
         // Should fill gaps with null
         assert_eq!(data["items"][0], Value::Null);
         assert_eq!(data["items"][1], Value::Null);

@@ -1,7 +1,7 @@
 //! Index storage and management
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
 
 /// Storage for collection indexes
 ///
@@ -10,10 +10,10 @@ use serde::{Serialize, Deserialize};
 pub struct IndexStore {
     /// Single-field indexes: field_name -> {value -> [positions]}
     pub single: HashMap<String, HashMap<String, Vec<usize>>>,
-    
+
     /// Compound indexes: [field1, field2, ...] -> {combined_key -> [positions]}
     pub compound: HashMap<Vec<String>, HashMap<String, Vec<usize>>>,
-    
+
     /// When these indexes were built (Unix timestamp)
     /// Used to invalidate indexes when data changes
     pub built_at: u64,
@@ -28,19 +28,19 @@ impl IndexStore {
             built_at: 0,
         }
     }
-    
+
     /// Check if indexes are still valid for given data modification time
     pub fn is_valid(&self, data_mtime: u64) -> bool {
         self.built_at >= data_mtime
     }
-    
+
     /// Clear all indexes
     pub fn clear(&mut self) {
         self.single.clear();
         self.compound.clear();
         self.built_at = 0;
     }
-    
+
     /// Get total number of indexes
     pub fn count(&self) -> usize {
         self.single.len() + self.compound.len()

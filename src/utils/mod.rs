@@ -32,12 +32,13 @@
 
 mod conversion;
 mod indexing;
-mod search;
 mod merge;
+mod search;
 
 pub use conversion::as_u64;
 pub use indexing::value_key;
-pub use search::search_in_value;
 pub use merge::merge_values;
+pub use search::search_in_value;
 
 pub mod interner;
+pub mod string;

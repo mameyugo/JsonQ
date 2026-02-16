@@ -3,8 +3,8 @@
 //! This module handles the conversion from PHP's dynamic Zval type system
 //! to Rust's strongly-typed JSON values.
 
-use ext_php_rs::types::{Zval, ZendHashTable, ArrayKey};
-use serde_json::{Value, Map, Number};
+use ext_php_rs::types::{ArrayKey, ZendHashTable, Zval};
+use serde_json::{Map, Number, Value};
 
 /// Convert a PHP Zval to a serde_json::Value
 ///
@@ -39,36 +39,36 @@ use serde_json::{Value, Map, Number};
 /// ```
 pub fn zval_to_value(zval: &Zval) -> Value {
     // Check type in order of likelihood for performance
-    
+
     if zval.is_null() {
         return Value::Null;
     }
-    
+
     if zval.is_bool() {
         return Value::Bool(zval.bool().unwrap_or(false));
     }
-    
+
     if zval.is_long() {
         let i = zval.long().unwrap_or(0);
         return Value::Number(Number::from(i));
     }
-    
+
     if zval.is_double() {
         let f = zval.double().unwrap_or(0.0);
         return Number::from_f64(f)
             .map(Value::Number)
             .unwrap_or(Value::Null); // NaN/Inf → null
     }
-    
+
     if zval.is_string() {
         let s = zval.str().unwrap_or("").to_string();
         return Value::String(s);
     }
-    
+
     if let Some(ht) = zval.array() {
         return ht_to_value(ht);
     }
-    
+
     // Unknown type → null
     Value::Null
 }
@@ -105,14 +105,14 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
     if ht.len() == 0 {
         return Value::Array(vec![]);
     }
-    
+
     // Single-pass conversion with on-the-fly detection
     // We build both structures during iteration, then return the appropriate one
     let mut arr = Vec::with_capacity(ht.len());
     let mut map = Map::new();
     let mut expected_index: u64 = 0;
     let mut is_sequential = true;
-    
+
     for (key, val) in ht.iter() {
         // Check if this key maintains sequential array property
         match key {
@@ -127,17 +127,17 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
                 is_sequential = false;
             }
         }
-        
+
         // Convert value once
         let value = zval_to_value(val);
-        
+
         // Build both structures (we'll discard one later)
         // This is faster than iterating twice, even with the extra memory
         if is_sequential {
             // Only build array if still sequential
             arr.push(value.clone());
         }
-        
+
         // Always build map for object case
         let key_str = match key {
             ArrayKey::String(s) => s.to_string(),
@@ -146,7 +146,7 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
         };
         map.insert(key_str, value);
     }
-    
+
     // Return appropriate structure
     if is_sequential {
         Value::Array(arr)
@@ -177,7 +177,7 @@ pub fn ht_to_value(ht: &ZendHashTable) -> Value {
 #[allow(dead_code)]
 fn detect_sequential_array(ht: &ZendHashTable) -> bool {
     let mut expected_index: u64 = 0;
-    
+
     for (key, _) in ht.iter() {
         match key {
             ArrayKey::Long(idx) => {
@@ -193,6 +193,6 @@ fn detect_sequential_array(ht: &ZendHashTable) -> bool {
             }
         }
     }
-    
+
     true
 }

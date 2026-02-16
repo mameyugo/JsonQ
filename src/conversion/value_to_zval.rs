@@ -16,7 +16,7 @@
 //!
 //! This is safe because PHP makes a copy and manages it independently.
 
-use ext_php_rs::types::{Zval, ZendHashTable};
+use ext_php_rs::types::{ZendHashTable, Zval};
 use serde_json::Value;
 
 /// Convert a serde_json::Value to a PHP Zval
@@ -45,16 +45,16 @@ use serde_json::Value;
 /// ```
 pub fn value_to_zval(val: &Value) -> Zval {
     let mut z = Zval::new();
-    
+
     match val {
         Value::Null => {
             z.set_null();
         }
-        
+
         Value::Bool(b) => {
             z.set_bool(*b);
         }
-        
+
         Value::Number(n) => {
             // Try integer first for better precision
             if let Some(i) = n.as_i64() {
@@ -72,37 +72,37 @@ pub fn value_to_zval(val: &Value) -> Zval {
                 z.set_double(n.as_f64().unwrap_or(0.0));
             }
         }
-        
+
         Value::String(s) => {
             // ✅ CORRECT: false = copy to PHP heap
             // PHP will own and manage this string
             let _ = z.set_string(s, false);
         }
-        
+
         Value::Array(arr) => {
             let mut ht = ZendHashTable::new();
-            
+
             // Convert each element
             for item in arr {
                 let item_zval = value_to_zval(item);
                 let _ = ht.push(item_zval);
             }
-            
+
             z.set_hashtable(ht);
         }
-        
+
         Value::Object(map) => {
             let mut ht = ZendHashTable::new();
-            
+
             // Convert each key-value pair
             for (k, v) in map {
                 let val_zval = value_to_zval(v);
                 let _ = ht.insert(k.as_str(), val_zval);
             }
-            
+
             z.set_hashtable(ht);
         }
     }
-    
+
     z
 }

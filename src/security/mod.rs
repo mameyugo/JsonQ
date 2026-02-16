@@ -1,18 +1,21 @@
 //! Security validation for file paths and operations
 
-use std::path::{Path, PathBuf};
-use std::fs;
 use crate::config::Config;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Validate a file path against security policies
 pub fn validate_path(path: &str) -> Result<PathBuf, String> {
     let config = Config::get();
-    
+
     // 1. Convert to PathBuf
     let path_buf = PathBuf::from(path);
-    
+
     // 2. Check for directory traversal in input components
-    if path_buf.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+    if path_buf
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return Err("Directory traversal (..) is not allowed in paths".to_string());
     }
 
@@ -29,7 +32,7 @@ pub fn validate_path(path: &str) -> Result<PathBuf, String> {
     } else {
         return Err("File must have an extension".to_string());
     }
-    
+
     // 3. Canonicalize or normalize path
     let canonical = match path_buf.canonicalize() {
         Ok(p) => p,
@@ -37,7 +40,7 @@ pub fn validate_path(path: &str) -> Result<PathBuf, String> {
             // Find existing ancestor
             let mut current = path_buf.clone();
             let mut parts = Vec::new();
-            
+
             while !current.exists() {
                 if let Some(name) = current.file_name() {
                     parts.push(name.to_owned());
@@ -52,28 +55,30 @@ pub fn validate_path(path: &str) -> Result<PathBuf, String> {
                     break;
                 }
             }
-            
-            let mut base = current.canonicalize()
+
+            let mut base = current
+                .canonicalize()
                 .map_err(|e| format!("Invalid base for path: {}", e))?;
-            
+
             for part in parts.into_iter().rev() {
                 base.push(part);
             }
             base
         }
     };
-    
+
     // 4. Check for directory traversal (should be handled by canonicalize, but double check)
     let canonical_str = canonical.to_string_lossy();
     if canonical_str.contains("..") {
         return Err("Directory traversal detected in canonical path".to_string());
     }
-    
+
     // 5. Validate against base_path if configured
     if let Some(base_path) = &config.base_path {
-        let base_canonical = base_path.canonicalize()
+        let base_canonical = base_path
+            .canonicalize()
             .map_err(|e| format!("Invalid base path: {}", e))?;
-        
+
         if !canonical.starts_with(&base_canonical) {
             return Err(format!(
                 "Path must be within base directory: {}",
@@ -81,23 +86,22 @@ pub fn validate_path(path: &str) -> Result<PathBuf, String> {
             ));
         }
     }
-    
+
     Ok(canonical)
 }
 
 /// Validate file size against maximum limit
 pub fn validate_file_size(path: &Path) -> Result<(), String> {
     let config = Config::get();
-    
+
     if !path.exists() {
         return Ok(());
     }
-    
-    let metadata = fs::metadata(path)
-        .map_err(|e| format!("Cannot read file metadata: {}", e))?;
-    
+
+    let metadata = fs::metadata(path).map_err(|e| format!("Cannot read file metadata: {}", e))?;
+
     let file_size = metadata.len();
-    
+
     if file_size > config.max_file_size {
         return Err(format!(
             "File size {} bytes exceeds maximum allowed {} bytes ({:.2} MB > {:.2} MB)",
@@ -107,28 +111,27 @@ pub fn validate_file_size(path: &Path) -> Result<(), String> {
             config.max_file_size as f64 / (1024.0 * 1024.0)
         ));
     }
-    
+
     Ok(())
 }
 
 /// Validate that a path depth doesn't exceed maximum
 pub fn validate_path_depth(path: &str) -> Result<(), String> {
     let config = Config::get();
-    
+
     let depth = if path.is_empty() {
         0
     } else {
         path.split('.').count()
     };
-    
+
     if depth > config.max_path_depth {
         return Err(format!(
             "Path depth {} exceeds maximum allowed {}",
-            depth,
-            config.max_path_depth
+            depth, config.max_path_depth
         ));
     }
-    
+
     Ok(())
 }
 

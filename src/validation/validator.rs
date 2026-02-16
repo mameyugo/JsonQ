@@ -1,8 +1,8 @@
 //! Main validation function
 
-use serde_json::{json, Value};
-use super::types::check_type;
 use super::constraints::*;
+use super::types::check_type;
+use serde_json::{json, Value};
 
 /// Validate a JSON value against a schema
 ///
@@ -85,7 +85,7 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
         }));
         return errors;
     }
-    
+
     if let Some(schema_obj) = schema.as_object() {
         // Type validation
         if let Some(expected_type) = schema_obj.get("type").and_then(|v| v.as_str()) {
@@ -97,7 +97,7 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 return errors; // Stop validation if type is wrong
             }
         }
-        
+
         // Numeric constraints
         if value.is_number() {
             for error_msg in validate_number_constraints(value, schema) {
@@ -107,7 +107,7 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 }));
             }
         }
-        
+
         // String constraints
         if value.is_string() {
             for error_msg in validate_string_constraints(value, schema) {
@@ -117,7 +117,7 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 }));
             }
         }
-        
+
         // Enum validation
         if let Some(enum_values) = schema_obj.get("enum") {
             if let Some(error_msg) = validate_enum(value, enum_values) {
@@ -127,7 +127,7 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 }));
             }
         }
-        
+
         // Required fields validation (for objects)
         if let Some(required) = schema_obj.get("required") {
             for error_msg in validate_required_fields(value, required) {
@@ -137,10 +137,10 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 }));
             }
         }
-        
+
         // Nested properties validation
-        if let (Some(Value::Object(props)), Some(obj)) = 
-            (schema_obj.get("properties"), value.as_object()) 
+        if let (Some(Value::Object(props)), Some(obj)) =
+            (schema_obj.get("properties"), value.as_object())
         {
             for (prop_name, prop_schema) in props {
                 let prop_path = if path.is_empty() {
@@ -148,23 +148,31 @@ fn validate_with_depth(value: &Value, schema: &Value, path: &str, depth: usize) 
                 } else {
                     format!("{}.{}", path, prop_name)
                 };
-                
+
                 let prop_value = obj.get(prop_name).unwrap_or(&Value::Null);
-                errors.extend(validate_with_depth(prop_value, prop_schema, &prop_path, depth + 1));
+                errors.extend(validate_with_depth(
+                    prop_value,
+                    prop_schema,
+                    &prop_path,
+                    depth + 1,
+                ));
             }
         }
-        
+
         // Array items validation
-        if let (Some(items_schema), Some(arr)) = 
-            (schema_obj.get("items"), value.as_array()) 
-        {
+        if let (Some(items_schema), Some(arr)) = (schema_obj.get("items"), value.as_array()) {
             for (index, item) in arr.iter().enumerate() {
                 let item_path = format!("{}.{}", path, index);
-                errors.extend(validate_with_depth(item, items_schema, &item_path, depth + 1));
+                errors.extend(validate_with_depth(
+                    item,
+                    items_schema,
+                    &item_path,
+                    depth + 1,
+                ));
             }
         }
     }
-    
+
     errors
 }
 
@@ -319,7 +327,7 @@ mod tests {
             "email": "alice@example.com",
             "tags": ["admin", "user"]
         });
-        
+
         let schema = json!({
             "type": "object",
             "required": ["name", "age", "email"],
@@ -333,7 +341,7 @@ mod tests {
                 }
             }
         });
-        
+
         let errors = validate(&value, &schema, "user");
         assert!(errors.is_empty());
     }

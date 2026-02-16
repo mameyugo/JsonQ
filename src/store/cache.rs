@@ -10,7 +10,7 @@ use std::sync::Arc;
 pub struct CachedData {
     /// Shared reference to the cached JSON data
     pub data: Arc<Value>,
-    
+
     /// Modification time (seconds since UNIX epoch)
     /// Used to detect file changes and invalidate cache
     pub mtime: u64,
@@ -21,7 +21,7 @@ impl CachedData {
     pub fn new(data: Arc<Value>, mtime: u64) -> Self {
         Self { data, mtime }
     }
-    
+
     /// Check if cache is still valid for given file mtime
     pub fn is_valid(&self, file_mtime: u64) -> bool {
         self.mtime == file_mtime
