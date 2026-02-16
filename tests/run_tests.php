@@ -61,7 +61,7 @@ echo str_repeat('═', 50) . "\n";
 echo "\n📦 Module\n";
 
 test('jsonq_version returns string', function() {
-    assert_eq('0.2.0', jsonq_version());
+    assert_eq('0.2.3', jsonq_version());
 });
 
 test('JsonQ\\Store class exists', function() {
@@ -769,8 +769,8 @@ if ($failed > 0) {
     foreach ($errors as $e) echo "  ✗ {$e}\n";
     echo "\n";
     $version = jsonq_version();
-    if ($version !== '0.2.0') {
-        echo "❌ Wrong extension version: $version (expected 0.2.0)\n";
+    if ($version !== '0.2.3') {
+        echo "❌ Wrong extension version: $version (expected 0.2.3)\n";
         exit(1);
     }
     exit(1);
