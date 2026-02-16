@@ -5,7 +5,6 @@
 
 use jsonq::store::StoreInner;
 use serde_json::json;
-use std::sync::Arc;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::Duration;

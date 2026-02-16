@@ -184,7 +184,23 @@ fn check_condition(item: &Value, condition: &Value) -> bool {
             }
             false
         }
-        _ => false,
+        _ => {
+            // Unknown operator - suggest similar
+            static VALID_OPS: &[&str] = &[
+                "=", "!=", "gt", "gte", "lt", "lte", "in", "contains", "startsWith", "endsWith",
+                "between",
+            ];
+            if let Some(suggestion) = crate::utils::string::suggest_similar(operator, VALID_OPS) {
+                tracing::warn!(
+                    "Unknown query operator: '{}'. Did you mean '{}'?",
+                    operator,
+                    suggestion
+                );
+            } else {
+                tracing::warn!("Unknown query operator: '{}'", operator);
+            }
+            false
+        }
     }
 }
 

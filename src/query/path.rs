@@ -78,77 +78,49 @@ impl PathSegment {
         let len = array.len() as i64;
         let step = step.unwrap_or(1);
 
-        // Normalize negative indices
-        let normalize = |idx: i64| -> usize {
+        if step == 0 {
+            return vec![];
+        }
+
+        let normalize = |idx: i64| -> i64 {
             if idx < 0 {
-                (len + idx).max(0) as usize
+                (len + idx).max(0)
             } else {
-                idx.min(len) as usize
+                idx.min(len)
             }
         };
 
-        let _start_idx =
-            start
-                .map(normalize)
-                .unwrap_or(if step > 0 { 0 } else { (len - 1) as usize });
-        let _end_idx = end
-            .map(normalize)
-            .unwrap_or(if step > 0 { len as usize } else { 0 }); // Wait, end for reverse default?
-                                                                 // Logic for reverse slice defaulting is tricky in Python.
-                                                                 // Usually [::-1] means start at end, end at beginning.
-
-        // Let's use simple logic for now matching guide
-        let start_idx = start.map(normalize).unwrap_or(0);
-        let end_idx = end.map(normalize).unwrap_or(len as usize);
-
         if step > 0 {
-            if start_idx >= end_idx {
+            let start_idx = start.map(normalize).unwrap_or(0) as usize;
+            let end_idx = end.map(normalize).unwrap_or(len) as usize;
+
+            if start_idx >= len as usize || start_idx >= end_idx {
                 return vec![];
             }
-            array[start_idx..end_idx]
+
+            array[start_idx..end_idx.min(len as usize)]
                 .iter()
                 .step_by(step as usize)
                 .cloned()
                 .collect()
         } else {
-            // Negative step
-            // For negative step, start default should be len-1, end default -1 (conceptually).
-            // Guide logic:
-            // "array[start_idx..end_idx].iter().rev()..."
-            // This assumes start_idx < end_idx, but we reverse it?
-            // If I want [5:0:-1], start=5, end=0.
-            // If start=5, end=0, range 5..0 is empty in Rust.
+            // Negative step logic (Python-style)
+            let start_idx = start.map(|idx| {
+                if idx < 0 { (len + idx).max(0) } else { idx.min(len - 1) }
+            }).unwrap_or(len - 1);
 
-            // Guide implementation:
-            // array[start_idx..end_idx].iter().rev()
-            // This implies start_idx < end_idx in the slice range, but we iterate backwards?
-            // This is not correct for [5:0:-1].
+            let end_idx = end.map(|idx| {
+                if idx < 0 { (len + idx).max(-1) } else { idx.min(len) }
+            }).unwrap_or(-1);
 
-            // I will implement a safer generic iter.
             let mut res = Vec::new();
-            let mut curr = if let Some(s) = start {
-                normalize(s)
-            } else {
-                (len - 1) as usize
-            } as i64;
-            let stop = if let Some(e) = end {
-                normalize(e) as i64
-            } else {
-                -1
-            };
+            let mut curr = start_idx;
 
-            // Safety check
-            if curr >= len {
-                curr = len - 1;
-            }
-
-            while curr > stop && curr >= 0 {
-                if curr < len {
-                    if let Some(v) = array.get(curr as usize) {
-                        res.push(v.clone());
-                    }
+            while curr > end_idx && curr >= 0 && curr < len {
+                if let Some(v) = array.get(curr as usize) {
+                    res.push(v.clone());
                 }
-                curr += step; // step is negative
+                curr += step;
             }
             res
         }

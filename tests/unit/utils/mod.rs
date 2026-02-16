@@ -1,2 +1,4 @@
 //! Unit tests for utils module
-//! Tests are inline in src/utils/*.rs
+pub mod interner_tests;
+
+// Other tests are inline in src/utils/*.rs

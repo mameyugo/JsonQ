@@ -41,7 +41,7 @@ pub fn levenshtein_distance(s1: &str, s2: &str) -> usize {
 /// Find the best match for a given input from a list of candidates.
 /// Returns Some(candidate) if the distance is within a threshold.
 pub fn suggest_similar(input: &str, candidates: &[&str]) -> Option<String> {
-    let threshold = 3; // Max edits allowed
+    let threshold = 2; // Max edits allowed
     let mut best_match = None;
     let mut min_distance = usize::MAX;
 

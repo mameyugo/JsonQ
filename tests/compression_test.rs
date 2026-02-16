@@ -21,7 +21,7 @@ mod tests {
         store.set_opts(opts);
 
         let data = json!({"test": "value".repeat(100)});
-        store.write(Arc::new(data)).unwrap();
+        store.write(Arc::new(data.clone())).unwrap();
 
         // Verify it's actually compressed (check magic header)
         let bytes = fs::read(&path).unwrap();
@@ -36,7 +36,7 @@ mod tests {
         opts.compression = CompressionMethod::Gzip;
         store.set_opts(opts);
 
-        store.write(Arc::new(data)).unwrap();
+        store.write(Arc::new(data.clone())).unwrap();
         let bytes = fs::read(&path).unwrap();
         assert_eq!(&bytes[0..2], &[0x1F, 0x8B]);
 
@@ -57,7 +57,7 @@ mod tests {
         let mut opts = StoreOpts::default();
         opts.compression = CompressionMethod::Zstd;
         store.set_opts(opts);
-        store.write(Arc::new(data)).unwrap();
+        store.write(Arc::new(data.clone())).unwrap();
 
         // Create a new store instance with NO compression set (it should auto-detect)
         let store2 = StoreInner::new(path_str).unwrap();
