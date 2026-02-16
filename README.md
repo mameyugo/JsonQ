@@ -1,9 +1,8 @@
 # 🚀 JsonQ - High-Performance JSON Storage Engine for PHP
 
 [![Build Status](https://github.com/mameyugo/JsonQ/actions/workflows/build.yml/badge.svg)](https://github.com/mameyugo/JsonQ/actions)
-[![PHP Version](https://img.shields.io/badge/PHP-8.1%20%7C%208.2%20%7C%208.3%20%7C%208.4-blue)](https://www.php.net/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.2.2-orange)](https://github.com/mameyugo/JsonQ/releases)
+[![License](https://img.shields.io/badge/License-PHP--3.01-green.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.2.3-orange)](https://github.com/mameyugo/JsonQ/releases)
 
 > **A blazing-fast, feature-rich JSON database engine built in Rust, designed as a drop-in replacement for simple databases and configuration storage.**
 
@@ -864,7 +863,7 @@ php examples/benchmark_v2.php
 
 ## 📄 License
 
-JsonQ is open-source software licensed under the [MIT License](LICENSE).
+JsonQ is open-source software licensed under [The PHP License, version 3.01](LICENSE).
 
 ---
 
