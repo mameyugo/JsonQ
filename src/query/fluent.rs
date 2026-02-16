@@ -121,14 +121,35 @@ pub fn execute_query(collection: &[Value], query: &Value) -> Vec<Value> {
         results.truncate(limit as usize);
     }
 
-    // 5. Select (field projection)
+    // 5. Select (field projection) OR Except (field exclusion)
     if let Some(select) = query.get("select").and_then(|s| s.as_array()) {
         let fields: Vec<&str> = select.iter().filter_map(|v| v.as_str()).collect();
         results = project_fields(&results, &fields);
+    } else if let Some(except) = query.get("except").and_then(|e| e.as_array()) {
+        let fields: Vec<&str> = except.iter().filter_map(|v| v.as_str()).collect();
+        results = exclude_fields(&results, &fields);
     }
 
     results
 }
+
+/// Exclude specific fields from results
+fn exclude_fields(results: &[Value], fields: &[&str]) -> Vec<Value> {
+    results
+        .iter()
+        .map(|item| {
+            if let Value::Object(mut obj) = item.clone() {
+                for field in fields {
+                    obj.remove(*field);
+                }
+                Value::Object(obj)
+            } else {
+                item.clone()
+            }
+        })
+        .collect()
+}
+
 
 /// Check if an item matches a where condition
 fn check_condition(item: &Value, condition: &Value) -> bool {

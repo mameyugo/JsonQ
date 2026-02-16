@@ -5,7 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2026-02-16
+
+### Added
+
+- **Collection Methods**
+  - `except(fields)` - Exclude specific fields from results (blacklist).
+  - `column(field)` - Extract values from a single column.
+  - `chunk(size)` - Split results into chunks.
+  - `implode(field, separator)` - Join column values into a string.
+  - `keys(path)` - Get object keys at path.
+  - `values(path)` - Get object values at path.
+  - `toJson(pretty)` - Serialize results to JSON string.
+
+### Changed
+
+- `executeQuery` now supports `except` alongside `select` (mutually exclusive).
+
+## [0.3.0] - 2026-02-16
+
+### Added
+
+- **Advanced JSONPath Support**
+  - Recursive descent (`..`).
+  - Wildcard operator (`*`).
+  - Slice notation (`[start:end:step]`).
+  - Multi-key selection (`['a','b']`).
+  - Filter expressions (`[?(@.age > 18)]`).
+
+- **Stream I/O**
+  - `write_to_stream` for low-memory writing of large files.
+  - `append_jsonl` for appending to JSON Lines files.
+  - `read_jsonl_iter` for lazy reading of JSON Lines files.
+
+- **Performance**
+  - `simdutf` integration for ultra-fast UTF-8 validation.
+  - Key deduplication (interning) for reduced memory usage.
+  - Computed property exclusion in `jsonq_memory_stats`.
+
+- **Developer Experience**
+  - Visual error reporting (`^` marker) for query syntax errors.
+  - `jsonq_version()` function.
+
 
 ## [0.2.0] - 2025-02-15
 

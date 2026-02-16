@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.3.0
+ * @version 0.3.1
  * @license The PHP License, version 3.01
  */
 
@@ -204,6 +204,43 @@ class Store
      * @return array Array of extracted values
      */
     public function pluck(string $collection, array $fields): array {}
+
+    /**
+     * Extract values from a single column.
+     *
+     * @param string $collection Collection path
+     * @param string $field Field name to extract
+     * @return array Array of values from that field
+     */
+    public function column(string $collection, string $field): array {}
+
+    /**
+     * Split collection into chunks.
+     *
+     * @param string $collection Collection path
+     * @param int $size Size of each chunk (must be > 0)
+     * @return array Array of arrays (chunks)
+     * @throws \Exception If size <= 0
+     */
+    public function chunk(string $collection, int $size): array {}
+
+    /**
+     * Join column values into a string.
+     *
+     * @param string $collection Collection path
+     * @param string $field Field name
+     * @param string $separator Separator string
+     * @return string Joined string
+     */
+    public function implode(string $collection, string $field, string $separator): string {}
+
+    /**
+     * Get values of an object at path.
+     *
+     * @param string $path Dot-notation path
+     * @return array Array of values
+     */
+    public function values(string $path): array {}
 
     // ── Validation ──
 

@@ -3,55 +3,10 @@
  * JsonQ Test Suite
  *
  * Comprehensive integration tests for the JsonQ PHP extension.
- * Run: php -d "extension=path/to/libjsonq.so" tests/integration/run_tests.php
+ * Run: php -d "extension=path/to/libjsonq.so" tests/run_tests.php
  */
 
-$passed = 0;
-$failed = 0;
-$errors = [];
-
-function test(string $name, callable $fn): void {
-    global $passed, $failed, $errors;
-    try {
-        $fn();
-        $passed++;
-        echo "  ✓ {$name}\n";
-    } catch (\Throwable $e) {
-        $failed++;
-        $errors[] = "{$name}: {$e->getMessage()} (line {$e->getLine()})";
-        echo "  ✗ {$name}: {$e->getMessage()}\n";
-    }
-}
-
-function assert_eq($expected, $actual, string $msg = ''): void {
-    if ($expected !== $actual) {
-        $e = var_export($expected, true);
-        $a = var_export($actual, true);
-        throw new \RuntimeException($msg ?: "Expected {$e}, got {$a}");
-    }
-}
-
-function assert_true($val, string $msg = ''): void {
-    if ($val !== true) throw new \RuntimeException($msg ?: "Expected true, got " . var_export($val, true));
-}
-
-function assert_false($val, string $msg = ''): void {
-    if ($val !== false) throw new \RuntimeException($msg ?: "Expected false");
-}
-
-function assert_count(int $expected, $arr, string $msg = ''): void {
-    $c = is_array($arr) ? count($arr) : -1;
-    if ($c !== $expected) throw new \RuntimeException($msg ?: "Expected count {$expected}, got {$c}");
-}
-
-function assert_null($val, string $msg = ''): void {
-    if ($val !== null) throw new \RuntimeException($msg ?: "Expected null");
-}
-
-function fresh_store(): \JsonQ\Store {
-    $path = tempnam(sys_get_temp_dir(), 'jsonq_test_') . '.json';
-    return new \JsonQ\Store($path);
-}
+require_once __DIR__ . '/integration/helpers.php';
 
 // ═══════════════════════════════════════════
 echo "\n🧪 JsonQ Test Suite v" . jsonq_version() . "\n";
@@ -61,7 +16,7 @@ echo str_repeat('═', 50) . "\n";
 echo "\n📦 Module\n";
 
 test('jsonq_version returns string', function() {
-    assert_eq('0.3.0', jsonq_version());
+    assert_eq('0.3.1', jsonq_version());
 });
 
 test('JsonQ\\Store class exists', function() {
@@ -760,21 +715,5 @@ test('search finds in nested fields', function() {
 });
 
 // ═══════════════════════════════════════════
-echo "\n" . str_repeat('═', 50) . "\n";
-$total = $passed + $failed;
-echo "Results: {$passed}/{$total} passed";
-if ($failed > 0) {
-    echo " ({$failed} failed)\n\n";
-    echo "Failures:\n";
-    foreach ($errors as $e) echo "  ✗ {$e}\n";
-    echo "\n";
-    $version = jsonq_version();
-    if ($version !== '0.2.3') {
-        echo "❌ Wrong extension version: $version (expected 0.2.3)\n";
-        exit(1);
-    }
-    exit(1);
-} else {
-    echo " — ALL PASSED ✅\n\n";
-    exit(0);
-}
+// ═══════════════════════════════════════════
+print_summary();

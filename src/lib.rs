@@ -821,6 +821,108 @@ impl JsonStore {
             .collect();
         Ok(records)
     }
+
+    #[php(name = "column")]
+    pub fn column(&self, collection: String, field: String) -> PhpResult<Vec<Zval>> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let data = i.read().map_err(|e| PhpException::from(e))?;
+        
+        let arr = match read_path(&data, &collection) {
+            Some(Value::Array(a)) => a,
+            _ => return Ok(Vec::new()),
+        };
+        
+        let values: Vec<Zval> = arr
+            .iter()
+            .filter_map(|item| {
+                if let Value::Object(obj) = item {
+                    obj.get(&field).map(value_to_zval)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        Ok(values)
+    }
+
+    #[php(name = "chunk")]
+    pub fn chunk(&self, collection: String, size: i64) -> PhpResult<Vec<Vec<String>>> {
+        if size <= 0 {
+            return Err(PhpException::from("Chunk size must be greater than 0"));
+        }
+        
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let data = i.read().map_err(|e| PhpException::from(e))?;
+        
+        let arr = match read_path(&data, &collection) {
+            Some(Value::Array(a)) => a,
+            _ => return Ok(Vec::new()),
+        };
+        
+        let chunks: Vec<Vec<String>> = arr
+            .chunks(size as usize)
+            .map(|chunk| {
+                chunk.iter()
+                    .map(|v| serde_json::to_string(v).unwrap_or_default())
+                    .collect()
+            })
+            .collect();
+        
+        Ok(chunks)
+    }
+
+    #[php(name = "implode")]
+    pub fn implode(&self, collection: String, field: String, separator: String) -> PhpResult<String> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let data = i.read().map_err(|e| PhpException::from(e))?;
+        
+        let arr = match read_path(&data, &collection) {
+            Some(Value::Array(a)) => a,
+            _ => return Ok(String::new()),
+        };
+
+        let strings: Vec<String> = arr
+            .iter()
+            .filter_map(|item| {
+                 if let Value::Object(obj) = item {
+                    obj.get(&field).map(|v| match v {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        Value::Null => "null".to_string(),
+                        _ => serde_json::to_string(v).unwrap_or_default(),
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        Ok(strings.join(&separator))
+    }
+
+    #[php(name = "values")]
+    pub fn values(&self, path: String) -> PhpResult<Vec<Zval>> {
+        validate_path_depth(&path).map_err(|e| PhpException::from(e))?;
+        
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let data = i.read().map_err(|e| PhpException::from(e))?;
+        
+        let target = if path.is_empty() || path == "." {
+            &*data
+        } else {
+            match read_path(&data, &path) {
+                Some(v) => v,
+                None => return Ok(Vec::new()),
+            }
+        };
+        
+        match target {
+            Value::Object(obj) => Ok(obj.values().map(value_to_zval).collect()),
+            _ => Ok(Vec::new()),
+        }
+    }
 }
 
 // ══════════ GLOBAL CONFIG API ══════════
