@@ -35,10 +35,6 @@
     }
   ],
   "homepage": "https://github.com/mameyugo/JsonQ",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/mameyugo/JsonQ.git"
-  },
   "require": {
     "php": ">=8.1"
   },
