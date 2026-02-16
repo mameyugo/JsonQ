@@ -80,12 +80,22 @@ JsonQ is **blazingly fast** for read-heavy workloads — exactly where most appl
 
 ## Installation
 
+### Via PIE (Recommended)
 
-### Requirements
+```bash
+# Install PIE if you haven't already
+php -r "copy('https://github.com/php/pie/releases/latest/download/pie.phar', 'pie.phar');"
+chmod +x pie.phar
+sudo mv pie.phar /usr/local/bin/pie
 
-- PHP 8.1 or later (with `php-dev` headers)
-- Rust 1.75 or later
-- `libclang-dev` (for bindgen)
+# Install JsonQ extension
+pie install mameyugo/jsonq
+```
+
+Then enable in `php.ini`:
+```ini
+extension=jsonq
+```
 
 ### From Source
 
@@ -368,28 +378,27 @@ JsonQ delivers **exceptional performance** for read-heavy workloads, queries, an
 
 **Test Environment**: PHP 8.3, Ubuntu 24.04, tested with 100 / 1K / 10K records
 
-#### 🚀 Where JsonQ Excels
+#### 🚀 Where JsonQ Excels (SIMD-Powered)
 
 | Operation | 100 records | 1K records | 10K records | Advantage |
 |-----------|-------------|------------|-------------|-----------|
-| **Read (cached)** | 0.064 ms | 0.519 ms | 6.295 ms | **1.9-2.3x faster** |
-| **Find (scan)** | 0.038 ms | 0.280 ms | 3.781 ms | **3.4-4.4x faster** |
-| **Find (indexed)** | 0.033 ms | 0.226 ms | 2.792 ms | **O(1) lookup** |
-| **Complex queries** | 0.122 ms | 1.149 ms | 13.726 ms | **1.3-1.8x faster** |
-| **Aggregations** | 0.010 ms | 0.033 ms | 0.931 ms | **13-36x faster** 🔥 |
+| **Read (cached)** | 0.058 ms | 0.536 ms | 6.169 ms | **2.0-2.6x faster** |
+| **Find (scan)** | 0.053 ms | 0.353 ms | 3.834 ms | **3.6-4.3x faster** |
+| **Find (indexed)** | 0.047 ms | 0.316 ms | 3.124 ms | **O(1) lookup** |
+| **Complex queries** | 0.125 ms | 1.174 ms | 13.962 ms | **1.3-1.8x faster** |
+| **Aggregations** | 0.010 ms | 0.034 ms | 0.923 ms | **13-34x faster** 🔥 |
 
-**Why JsonQ dominates here**:
-- **Zero-copy reads**: Arc-based caching eliminates repeated deserialization
-- **Rust-native filtering**: Compiled code vs PHP's interpreted array operations
-- **Optimized aggregations**: Direct numeric operations without array_sum/array_column overhead
-- **Memory-mapped I/O**: Large files read without loading into memory
-- **Smart indexes**: HashMap-based O(1) lookups for equality searches
+**Why JsonQ is a Performance Beast:**
+- **SIMD Acceleration**: Uses AVX2/SSE instructions for blazing fast JSON parsing (Phase 3).
+- **Zero-Copy Reads**: Smart Archive (Arc) caching eliminates repeated deserialization overhead.
+- **Memory-Mapped I/O**: Handles large files efficiently without loading everything into RAM.
+- **Rust-Native Execution**: Complex logic runs in native machine code, bypassing PHP interpreter overhead.
 
 #### ⚖️ Write Performance Trade-off
 
 | Operation | 100 records | 1K records | 10K records | PHP Advantage |
 |-----------|-------------|------------|-------------|---------------|
-| **Write** | 0.514 ms | 3.871 ms | 41.023 ms | **3.4-3.8x faster** |
+| **Write** | 0.485 ms | 4.044 ms | 39.175 ms | **3.5-3.6x faster** |
 
 **Why PHP is faster at writes** (and why that's okay):
 

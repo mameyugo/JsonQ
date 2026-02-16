@@ -1,33 +1,55 @@
 {
-    "name": "mameyugo/jsonq",
-    "description": "PHP stubs and build tools for JsonQ — a high-performance JSON file storage engine powered by Rust",
-    "type": "php-ext-stubs",
-    "license": "MIT",
-    "homepage": "https://github.com/mameyugo/JsonQ",
-    "keywords": ["json", "storage", "database", "rust", "extension", "nosql", "query"],
-    "authors": [
-        {
-            "name": "Mameyugo",
-            "email": "info@mameyugo.com",
-            "role": "Developer"
-        }
-    ],
-    "require": {
-        "php": ">=8.1"
-    },
-    "autoload": {
-        "files": []
-    },
-    "extra": {
-        "ide-stubs": "stubs/jsonq.php"
-    },
-    "scripts": {
-        "build": "cargo build --release",
-        "test": "php -d extension=$(pwd)/target/release/libjsonq.so tests/integration/run_tests.php",
-        "bench": "php -d extension=$(pwd)/target/release/libjsonq.so examples/benchmark.php"
-    },
-    "support": {
-        "issues": "https://github.com/mameyugo/JsonQ/issues",
-        "source": "https://github.com/mameyugo/JsonQ"
+  "name": "mameyugo/jsonq",
+  "type": "php-ext",
+  "description": "High-performance JSON file storage engine for PHP, powered by Rust",
+  "keywords": [
+    "php",
+    "json",
+    "storage",
+    "database",
+    "extension",
+    "rust",
+    "mongodb-style",
+    "queries",
+    "transactions"
+  ],
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Mameyugo",
+      "email": "info@mameyugo.com",
+      "homepage": "https://github.com/mameyugo"
     }
+  ],
+  "support": {
+    "issues": "https://github.com/mameyugo/JsonQ/issues",
+    "source": "https://github.com/mameyugo/JsonQ",
+    "docs": "https://github.com/mameyugo/JsonQ/blob/main/docs/API.md"
+  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/mameyugo"
+    }
+  ],
+  "homepage": "https://github.com/mameyugo/JsonQ",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mameyugo/JsonQ.git"
+  },
+  "require": {
+    "php": ">=8.1"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^9|^10"
+  },
+  "provide": {
+    "ext-jsonq": "0.2.0"
+  },
+  "config": {
+    "preferred-install": "dist",
+    "allow-plugins": {
+      "php-http/discovery": true
+    }
+  }
 }
