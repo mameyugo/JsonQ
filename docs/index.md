@@ -42,21 +42,30 @@ JsonQ is a **PHP extension written in Rust** that provides a blazing-fast, file-
 ### Getting Started
 - [Installation Guide](getting-started/installation.md) - Install JsonQ in 2 minutes
 - [Quick Start Tutorial](getting-started/quick-start.md) - Your first app in 5 minutes
+- [Migration Guide](getting-started/migration-guide.md) - Moving from pure PHP JSON
 
 ### Core Guides
 - [Querying Data](guides/queries.md) - MongoDB-style & Fluent queries
 - [Schema Validation](guides/schema-validation.md) - Data integrity
 - [Indexing](guides/indexing.md) - Performance optimization
 - [Transactions](guides/transactions.md) - ACID guarantees
+- [Aggregation](guides/aggregation.md) - sum, avg, groupBy, etc.
 
 ### API Reference
 - [JsonQ\Store Class](api/store-class.md) - Complete API
+- [Query Operators](api/operators.md) - $eq, $gt, $regex, etc.
+- [Schema Keywords](reference/schema-keywords.md) - JSON Schema support
 
 ### Real-World Examples
 - [REST API](examples/rest-api.md) - Build an API with JsonQ
+- [TODO App](examples/todo-app.md) - Simple CRUD application
+- [E-Commerce](examples/e-commerce.md) - Shopping cart system
+- [Analytics](examples/real-time-analytics.md) - Real-time data processing
 
 ### Production
 - [Deployment Guide](deployment/production.md) - Go to production
+- [Performance Tuning](deployment/performance-tuning.md) - Optimize for your workload
+- [Monitoring](deployment/monitoring.md) - Track metrics
 
 ---
 
@@ -185,10 +194,17 @@ try {
 2. [Try the Quick Start](getting-started/quick-start.md) (5 minutes)
 3. [Build a REST API](examples/rest-api.md) (15 minutes)
 
+### Coming from Pure PHP?
+
+1. [Migration Guide](getting-started/migration-guide.md)
+2. [Best Practices](guides/best-practices.md)
+3. [Performance Tuning](deployment/performance-tuning.md)
+
 ### Ready for Production?
 
 1. [Deployment Checklist](deployment/production.md)
-2. [Backup Strategy](deployment/production.md#backup-strategy)
+2. [Monitoring Setup](deployment/monitoring.md)
+3. [Backup Strategy](deployment/production.md#backup-strategy)
 
 ---
 
