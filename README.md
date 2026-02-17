@@ -103,47 +103,100 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 
 ---
 
-## 🚀 Quick Start
+## Releases & Pre-built Binaries
 
-### Installation
+Every release tag automatically triggers the CI/CD pipeline which builds and
+publishes ready-to-use binaries:
 
-#### Via APT (Debian/Ubuntu)
+| Platform              | Format          | PHP versions       |
+|-----------------------|-----------------|--------------------|
+| Ubuntu/Debian (amd64) | `.so` + `.deb`  | 8.1, 8.2, 8.3, 8.4 |
+| Ubuntu/Debian (arm64) | `.so` + `.deb`  | 8.1, 8.2, 8.3, 8.4 |
+| macOS (Apple Silicon) | `.dylib`        | 8.1, 8.2, 8.3, 8.4 |
+| macOS (Intel x86_64)  | `.dylib`        | 8.1, 8.2, 8.3, 8.4 |
 
-```bash
-# Add repository
-curl -fsSL https://mameyugo.github.io/JsonQ/jsonq-archive-keyring.gpg | sudo gpg --dearmor -o /usr/share/keyrings/jsonq-archive-keyring.gpg
-echo "deb [signed-by=/usr/share/keyrings/jsonq-archive-keyring.gpg] https://mameyugo.github.io/JsonQ stable main" | sudo tee /etc/apt/sources.list.d/jsonq.list
+➡️ **[Download latest release](https://github.com/mameyugo/JsonQ/releases/latest)**
 
-# Install
-sudo apt update
-sudo apt install php8.3-jsonq
-
-# Enable extension
-php -m | grep jsonq
+### Binary naming convention
+```
+jsonq-v{version}-{os}-{arch}-php{version}.{ext}
+```
+Examples:
+```
+jsonq-v0.2.0-linux-x86_64-php8.3.so
+jsonq-v0.2.0-macos-arm64-php8.3.dylib
+php8.3-jsonq_0.2.0-1_amd64.deb
 ```
 
-#### Via Curl (Quick Install)
+---
+
+## 🚀 Quick Start
+
+## Installation
+
+### Method 1 — Pre-built binary (recommended)
+
+Download the pre-compiled extension from
+[GitHub Releases](https://github.com/mameyugo/JsonQ/releases/latest).
+
+#### Linux (Ubuntu/Debian)
+
+```bash
+# 1. Find your extension directory
+php-config --extension-dir
+
+# 2. Download the .so for your PHP version (example: PHP 8.3, amd64)
+wget https://github.com/mameyugo/JsonQ/releases/latest/download/jsonq-v{VERSION}-linux-x86_64-php8.3.so
+
+# 3. Copy to extensions directory
+sudo cp jsonq-v*-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
+
+# 4. Enable the extension
+echo 'extension=jsonq.so' | sudo tee /etc/php/8.3/mods-available/jsonq.ini
+sudo phpenmod -v 8.3 jsonq
+```
+
+#### macOS
+
+```bash
+# 1. Download the .dylib for your PHP version (example: PHP 8.3, Apple Silicon)
+curl -LO https://github.com/mameyugo/JsonQ/releases/latest/download/jsonq-v{VERSION}-macos-arm64-php8.3.dylib
+
+# 2. Copy to extensions directory
+sudo cp jsonq-v*-macos-arm64-php8.3.dylib $(php-config --extension-dir)/jsonq.so
+
+# 3. Enable
+echo 'extension=jsonq.so' >> $(php --ini | grep 'Loaded Configuration' | awk '{print $NF}')
+```
+
+### Method 2 — APT repository (Debian/Ubuntu)
+
+```bash
+curl -fsSL https://mameyugo.github.io/JsonQ/jsonq-archive-keyring.gpg \
+  | sudo gpg --dearmor -o /usr/share/keyrings/jsonq-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/jsonq-archive-keyring.gpg] \
+  https://mameyugo.github.io/JsonQ stable main" \
+  | sudo tee /etc/apt/sources.list.d/jsonq.list
+
+sudo apt update && sudo apt install php8.3-jsonq
+```
+
+### Method 3 — Quick install script
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mameyugo/JsonQ/main/scripts/install.sh | sudo bash
 ```
 
-#### Build from Source
+### Method 4 — Build from source
 
 ```bash
-# Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Clone and build
 git clone https://github.com/mameyugo/JsonQ.git
-cd JsonQ
-cargo build --release
-
-# Install
-sudo cp target/release/libjsonq.so $(php-config --extension-dir)/jsonq.so
-echo "extension=jsonq.so" | sudo tee /etc/php/8.3/mods-available/jsonq.ini
-sudo phpenmod jsonq
+cd JsonQ && make build && make install
 ```
+
+---
 
 ### Hello World
 
