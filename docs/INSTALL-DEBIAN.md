@@ -6,20 +6,39 @@
 
 ---
 
-## Quick Install (one-liner)
+## Method 1: Direct .deb Download (recommended)
+
+Pre-built `.deb` packages are available on every release.  
+Download from [GitHub Releases](https://github.com/mameyugo/JsonQ/releases/latest):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mameyugo/JsonQ/main/scripts/install.sh | sudo bash
+# One-liner: auto-detect PHP version and download latest .deb
+PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+ARCH=$(dpkg --print-architecture)
+LATEST=$(curl -s https://api.github.com/repos/mameyugo/JsonQ/releases/latest \
+  | grep tag_name | sed 's/.*"v\(.*\)".*/\1/')
+
+wget "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/php${PHP_VER}-jsonq_${LATEST}-1_${ARCH}.deb"
+sudo dpkg -i php${PHP_VER}-jsonq_${LATEST}-1_${ARCH}.deb
+sudo apt-get install -f   # fix dependencies if needed
 ```
 
-For a specific PHP version:
-```bash
-curl -fsSL https://raw.githubusercontent.com/mameyugo/JsonQ/main/scripts/install.sh | sudo bash -s -- --php 8.3
-```
+### Available packages per release
+
+| File | PHP | Architecture |
+|------|-----|--------------|
+| `php8.1-jsonq_{ver}-1_amd64.deb` | PHP 8.1 | amd64 |
+| `php8.2-jsonq_{ver}-1_amd64.deb` | PHP 8.2 | amd64 |
+| `php8.3-jsonq_{ver}-1_amd64.deb` | PHP 8.3 | amd64 |
+| `php8.4-jsonq_{ver}-1_amd64.deb` | PHP 8.4 | amd64 |
+| `php8.1-jsonq_{ver}-1_arm64.deb` | PHP 8.1 | arm64 |
+| `php8.2-jsonq_{ver}-1_arm64.deb` | PHP 8.2 | arm64 |
+| `php8.3-jsonq_{ver}-1_arm64.deb` | PHP 8.3 | arm64 |
+| `php8.4-jsonq_{ver}-1_arm64.deb` | PHP 8.4 | arm64 |
 
 ---
 
-## Method 1: APT Repository (recommended)
+## Method 2: APT Repository
 
 Add the JsonQ repository for automatic updates:
 
@@ -55,39 +74,20 @@ sudo apt-get upgrade php8.3-jsonq
 
 ---
 
-## Method 2: Direct .deb Download
-
-Pre-built `.deb` packages are available on every release.  
-Download from [GitHub Releases](https://github.com/mameyugo/JsonQ/releases/latest):
+## Method 3: Quick Install Script
 
 ```bash
-# One-liner: auto-detect PHP version and download latest .deb
-PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
-ARCH=$(dpkg --print-architecture)
-LATEST=$(curl -s https://api.github.com/repos/mameyugo/JsonQ/releases/latest \
-  | grep tag_name | sed 's/.*"v\(.*\)".*/\1/')
-
-wget "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/php${PHP_VER}-jsonq_${LATEST}-1_${ARCH}.deb"
-sudo dpkg -i php${PHP_VER}-jsonq_${LATEST}-1_${ARCH}.deb
-sudo apt-get install -f   # fix dependencies if needed
+curl -fsSL https://raw.githubusercontent.com/mameyugo/JsonQ/main/scripts/install.sh | sudo bash
 ```
 
-### Available packages per release
-
-| File | PHP | Architecture |
-|------|-----|--------------|
-| `php8.1-jsonq_{ver}-1_amd64.deb` | PHP 8.1 | amd64 |
-| `php8.2-jsonq_{ver}-1_amd64.deb` | PHP 8.2 | amd64 |
-| `php8.3-jsonq_{ver}-1_amd64.deb` | PHP 8.3 | amd64 |
-| `php8.4-jsonq_{ver}-1_amd64.deb` | PHP 8.4 | amd64 |
-| `php8.1-jsonq_{ver}-1_arm64.deb` | PHP 8.1 | arm64 |
-| `php8.2-jsonq_{ver}-1_arm64.deb` | PHP 8.2 | arm64 |
-| `php8.3-jsonq_{ver}-1_arm64.deb` | PHP 8.3 | arm64 |
-| `php8.4-jsonq_{ver}-1_arm64.deb` | PHP 8.4 | arm64 |
+For a specific PHP version:
+```bash
+curl -fsSL https://raw.githubusercontent.com/mameyugo/JsonQ/main/scripts/install.sh | sudo bash -s -- --php 8.3
+```
 
 ---
 
-## Method 3: Build from Source
+## Method 4: Build from Source
 
 Requires Rust toolchain and PHP development headers:
 
