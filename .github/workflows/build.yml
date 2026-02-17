@@ -225,6 +225,6 @@ jobs:
             ### Verify
 
             ```bash
-            php -m | grep jsonq
+            php -m |  grep jsonq
             php -r "echo jsonq_version();"
             ```
