@@ -169,6 +169,7 @@ jobs:
             # Manual dispatch - extract version from Cargo.toml
             VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/' | tr -d '\r')
             TAG="v${VERSION}"
+            echo "⚠️  Note: If release $TAG already exists, it will be updated"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "📌 Release tag: $TAG"

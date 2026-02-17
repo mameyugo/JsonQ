@@ -137,6 +137,8 @@ If you need to create a release without pushing a new tag (e.g., to rebuild bina
 
 The release will be created using the version specified in `Cargo.toml` (e.g., version `0.3.1` → tag `v0.3.1`).
 
+**Note**: If a release with that version already exists, it will be updated with the new binaries. This is useful for rebuilding releases without changing the version number.
+
 ## Performance Considerations
 
 When contributing, keep in mind:
