@@ -142,30 +142,33 @@ Download the pre-compiled extension from [GitHub Releases](https://github.com/ma
 #### Linux (Ubuntu/Debian)
 
 ```bash
-# 1. Find your extension directory
-php-config --extension-dir
+# Auto-detect and download
+PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+ARCH=$(uname -m)
+LATEST=$(curl -s https://api.github.com/repos/mameyugo/JsonQ/releases/latest | grep tag_name | sed 's/.*"v\(.*\)".*/\1/')
 
-# 2. Download the .so for your PHP version (example: PHP 8.3, amd64)
-wget https://github.com/mameyugo/JsonQ/releases/latest/download/jsonq-v{VERSION}-linux-x86_64-php8.3.so
+# Download .so file
+wget "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/jsonq-v${LATEST}-linux-${ARCH}-php${PHP_VER}.so"
 
-# 3. Copy to extensions directory
-sudo cp jsonq-v*-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
-
-# 4. Enable the extension
-echo 'extension=jsonq.so' | sudo tee /etc/php/8.3/mods-available/jsonq.ini
-sudo phpenmod -v 8.3 jsonq
+# Install
+sudo cp jsonq-v*-linux-*-php${PHP_VER}.so $(php-config --extension-dir)/jsonq.so
+echo "extension=jsonq.so" | sudo tee /etc/php/${PHP_VER}/mods-available/jsonq.ini
+sudo phpenmod -v ${PHP_VER} jsonq
 ```
 
 #### macOS
 
 ```bash
-# 1. Download the .dylib for your PHP version (example: PHP 8.3, Apple Silicon)
-curl -LO https://github.com/mameyugo/JsonQ/releases/latest/download/jsonq-v{VERSION}-macos-arm64-php8.3.dylib
+# Auto-detect and download
+PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+ARCH=$(uname -m)
+LATEST=$(curl -s https://api.github.com/repos/mameyugo/JsonQ/releases/latest | grep tag_name | sed 's/.*"v\(.*\)".*/\1/')
 
-# 2. Copy to extensions directory
-sudo cp jsonq-v*-macos-arm64-php8.3.dylib $(php-config --extension-dir)/jsonq.so
+# Download .dylib file
+curl -LO "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/jsonq-v${LATEST}-macos-${ARCH}-php${PHP_VER}.dylib"
 
-# 3. Enable
+# Install
+sudo cp jsonq-v*.dylib $(php-config --extension-dir)/jsonq.so
 echo 'extension=jsonq.so' >> $(php --ini | grep 'Loaded Configuration' | awk '{print $NF}')
 ```
 
