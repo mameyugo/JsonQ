@@ -99,7 +99,11 @@ JsonQ/
 
 ## Release Process
 
-When releasing a new version of JsonQ, follow these steps to ensure consistency:
+JsonQ uses GitHub Actions to automatically build binaries and create releases. There are two ways to trigger a release:
+
+### Method 1: Tag Push (Recommended)
+
+When releasing a new version of JsonQ, follow these steps:
 
 1. **Update `Cargo.toml`**: Increment the `version` field.
 2. **Update PHP Stubs**: Update the `@version` tag in `stubs/jsonq.php`.
@@ -116,6 +120,22 @@ When releasing a new version of JsonQ, follow these steps to ensure consistency:
    git tag -a v0.X.X -m "Release v0.X.X"
    git push origin main --tags
    ```
+
+The GitHub Actions workflow will automatically:
+- Build binaries for Linux and macOS (PHP 8.1-8.4)
+- Create .deb packages for Debian/Ubuntu
+- Create a GitHub release with all artifacts attached
+
+### Method 2: Manual Workflow Dispatch
+
+If you need to create a release without pushing a new tag (e.g., to rebuild binaries for the current version):
+
+1. Go to the [Actions tab](https://github.com/mameyugo/JsonQ/actions/workflows/build.yml)
+2. Click "Run workflow"
+3. Select the branch (usually `main`)
+4. Click "Run workflow"
+
+The release will be created using the version specified in `Cargo.toml` (e.g., version `0.3.1` → tag `v0.3.1`).
 
 ## Performance Considerations
 
