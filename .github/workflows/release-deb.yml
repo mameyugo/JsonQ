@@ -1,14 +1,18 @@
 name: Build & Publish Debian Packages
 
+# DESACTIVADO: la generación de .deb fue consolidada en build.yml
+# on:
+#   push:
+#     tags:
+#       - 'v*'
+#   workflow_dispatch:
+
 on:
-  push:
-    tags:
-      - 'v*'          # Trigger on version tags: v0.1.0, v1.0.0, etc.
-  workflow_dispatch:   # Allow manual trigger
+  workflow_dispatch:
     inputs:
-      php_versions:
-        description: 'PHP versions (comma-separated)'
-        default: '8.1,8.2,8.3,8.4'
+      manual_only:
+        description: 'Este workflow está desactivado. Los .deb se generan en build.yml'
+        default: 'true'
 
 permissions:
   contents: write      # For creating releases
