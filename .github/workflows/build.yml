@@ -140,11 +140,11 @@ jobs:
           path: dist/${{ steps.artifact.outputs.artifact_name }}
           if-no-files-found: error
 
-  # ─── Create GitHub Release on version tags ───
+  # ─── Create GitHub Release on version tags or manual dispatch ───
   release:
     name: Create Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,6 +159,20 @@ jobs:
           path: release-assets
           merge-multiple: false
 
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            # Tag push - use the tag as-is
+            TAG="${{ github.ref_name }}"
+          else
+            # Manual dispatch - extract version from Cargo.toml
+            VERSION=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/' | tr -d '\r')
+            TAG="v${VERSION}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "📌 Release tag: $TAG"
+
       - name: Prepare release files
         run: |
           mkdir -p release
@@ -172,6 +186,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.tag }}
           generate_release_notes: true
           files: release/*
           body: |
@@ -183,7 +198,7 @@ jobs:
             # Auto-detect your PHP version and architecture
             PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
             ARCH=$(dpkg --print-architecture)
-            wget "https://github.com/mameyugo/JsonQ/releases/download/${{ github.ref_name }}/php${PHP_VER}-jsonq_*_${ARCH}.deb"
+            wget "https://github.com/mameyugo/JsonQ/releases/download/${{ steps.tag.outputs.tag }}/php${PHP_VER}-jsonq_*_${ARCH}.deb"
             sudo dpkg -i php${PHP_VER}-jsonq_*_${ARCH}.deb
             sudo apt-get install -f
             ```
