@@ -40,7 +40,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang libclang-dev
+          sudo apt-get install -y clang libclang-dev dpkg-dev
 
       - name: Install Dependencies (macOS)
         if: runner.os == 'macOS'
@@ -115,6 +115,24 @@ jobs:
         run: |
           php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/run_tests.php
 
+      - name: Build .deb package (Linux only)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x scripts/build-deb.sh
+          PHP="${{ matrix.php }}"
+          ARCH=$(dpkg --print-architecture)
+          ./scripts/build-deb.sh "$PHP" "$ARCH"
+          echo "✅ .deb built:"
+          ls -lh build/out/*.deb
+
+      - name: Upload .deb artifact (Linux only)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-php${{ matrix.php }}-${{ steps.platform.outputs.arch }}
+          path: build/out/*.deb
+          if-no-files-found: error
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -144,7 +162,10 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
+          # Collect .so and .dylib binaries
           find release-assets -type f \( -name "*.so" -o -name "*.dylib" \) -exec cp {} release/ \;
+          # Collect .deb packages
+          find release-assets -type f -name "*.deb" -exec cp {} release/ \;
           echo "📦 Release files:"
           ls -lh release/
 
@@ -156,28 +177,35 @@ jobs:
           body: |
             ## Installation
 
-            1. Download the appropriate binary for your platform and PHP version
-            2. Copy to your PHP extensions directory:
-               ```bash
-               # Find your extension directory
-               php -i | grep extension_dir
-
-               # Copy the extension (example for Linux PHP 8.3)
-               sudo cp jsonq-v*-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
-               ```
-            3. Enable the extension in `php.ini`:
-               ```ini
-               extension=jsonq.so
-               ```
-            4. Verify:
-               ```bash
-               php -m | grep jsonq
-               ```
-
-            ## Build from source
+            ### Linux — .deb package (easiest)
 
             ```bash
-            git clone https://github.com/mameyugo/JsonQ.git
-            cd JsonQ
-            cargo build --release
+            # Auto-detect your PHP version and architecture
+            PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+            ARCH=$(dpkg --print-architecture)
+            wget "https://github.com/mameyugo/JsonQ/releases/download/${{ github.ref_name }}/php${PHP_VER}-jsonq_*_${ARCH}.deb"
+            sudo dpkg -i php${PHP_VER}-jsonq_*_${ARCH}.deb
+            sudo apt-get install -f
+            ```
+
+            ### Linux — manual .so
+
+            ```bash
+            sudo cp jsonq-v*-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
+            echo 'extension=jsonq.so' | sudo tee /etc/php/8.3/mods-available/jsonq.ini
+            sudo phpenmod -v 8.3 jsonq
+            ```
+
+            ### macOS
+
+            ```bash
+            sudo cp jsonq-v*-macos-arm64-php8.3.dylib $(php-config --extension-dir)/jsonq.so
+            echo 'extension=jsonq.so' > $(php --ini | grep 'Loaded Configuration' | awk '{print $NF}')
+            ```
+
+            ### Verify
+
+            ```bash
+            php -m | grep jsonq
+            php -r "echo jsonq_version();"
             ```
