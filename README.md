@@ -147,12 +147,13 @@ php-config --extension-dir
 
 # 2. Download the .so for your PHP version (auto-detect latest version)
 PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')
+ARCH=$(uname -m)   # x86_64 or aarch64
 LATEST=$(curl -s https://api.github.com/repos/mameyugo/JsonQ/releases/latest \
   | grep tag_name | sed 's/.*"v\(.*\)".*/\1/')
-wget "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/jsonq-v${LATEST}-linux-x86_64-php${PHP_VER}.so"
+wget "https://github.com/mameyugo/JsonQ/releases/download/v${LATEST}/jsonq-v${LATEST}-linux-${ARCH}-php${PHP_VER}.so"
 
 # 3. Copy to extensions directory
-sudo cp jsonq-v*-linux-x86_64-php*.so $(php-config --extension-dir)/jsonq.so
+sudo cp jsonq-v*-linux-${ARCH}-php*.so $(php-config --extension-dir)/jsonq.so
 
 # 4. Enable the extension
 echo 'extension=jsonq.so' | sudo tee /etc/php/${PHP_VER}/mods-available/jsonq.ini
