@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-02-19
+
+### Fixed
+
+- **Stream Object Handling**: `stream()` now correctly returns an empty stream when pointing to an object instead of throwing an error. This allows safe iteration even if the target is not an array.
+- **Unit Tests**: Added comprehensive unit tests for `StreamReader`, `StreamFilter`, and `JsonPointer`.
+- **StreamFilter API**: Added public `apply()` method to `StreamFilter`.
+
 ## [0.4.0] - 2026-02-19
 
 ### Added

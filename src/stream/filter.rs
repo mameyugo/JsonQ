@@ -55,19 +55,28 @@ impl StreamFilter {
     }
 
     /// Apply selection (projection) to an item
-    pub fn project(&self, item: Value) -> Value {
+    pub fn project(&self, value: Value) -> Value {
         if let Some(fields) = &self.select_fields {
-            if let Value::Object(map) = item {
+            if let Value::Object(map) = value {
                 let mut new_map = serde_json::Map::new();
                 for field in fields {
-                    if let Some(val) = map.get(field) {
-                        new_map.insert(field.clone(), val.clone());
+                    if let Some(v) = map.get(field) {
+                        new_map.insert(field.clone(), v.clone());
                     }
                 }
                 return Value::Object(new_map);
             }
         }
-        item
+        value
+    }
+
+    /// Apply filter: check conditions and apply projection.
+    /// Returns Some(projected_item) if item passes, None if filtered out.
+    pub fn apply(&self, item: Value) -> Option<Value> {
+        if !self.matches(&item) {
+            return None;
+        }
+        Some(self.project(item))
     }
 }
 

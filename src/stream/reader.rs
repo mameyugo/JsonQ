@@ -167,16 +167,10 @@ impl<'de> Visitor<'de> for StreamVisitor {
             // OR: We accept that streaming a single object yields nothing? No.
             //
             // Correct approach: Since we can't easily delegate back to Value's visitor from here without value...
-            // Actually `Value` implementation uses `MapVisitor`.
-            
-            // For now, let's treat "Stream a map" as "Yield nothing" or Error?
-            // The purpose of streaming is usually list iteration.
-            // But "stream root object" might expect 1 item.
-            
-            // Let's implement best effort: return error.
-            return Err(de::Error::custom("Streaming target must be an array (found object). To read single object use findOne."));
+            // Silently consume the object and return empty stream (for stream() method consistency)
+            while map.next_entry::<de::IgnoredAny, de::IgnoredAny>()?.is_some() {}
+            return Ok(());
         }
-
         let current_token = &self.tokens[0];
         
         while let Some(key) = map.next_key::<String>()? {

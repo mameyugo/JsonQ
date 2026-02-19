@@ -10,7 +10,7 @@
  * In production, the native Rust extension provides the real implementations.
  *
  * @package  JsonQ
- * @version  0.4.0
+ * @version  0.4.1
  * @license  The PHP License, version 3.01
  * @link     https://github.com/mameyugo/JsonQ
  */

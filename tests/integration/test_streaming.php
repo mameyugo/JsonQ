@@ -1,6 +1,6 @@
 <?php
 /**
- * JsonQ v0.4.0 — Streaming Tests
+ * JsonQ v0.4.1 — Streaming Tests
  *
  * Tests para el módulo de streaming nativo con JSON Pointer RFC 6901.
  * Requiere: JsonQ extension >= 0.4.0

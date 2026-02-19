@@ -55,10 +55,10 @@ Download from [GitHub Releases](https://github.com/mameyugo/JsonQ/releases/lates
 
 ```bash
 # Download
-wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.0/php8.3-jsonq_0.4.0-1_amd64.deb
+wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.1/php8.3-jsonq_0.4.1-1_amd64.deb
 
 # Install
-sudo dpkg -i php8.3-jsonq_0.4.0-1_amd64.deb
+sudo dpkg -i php8.3-jsonq_0.4.1-1_amd64.deb
 sudo apt-get install -f    # fix dependencies if needed
 ```
 
@@ -91,7 +91,7 @@ make install
 php -m | grep jsonq
 
 # Check version
-php -r "echo jsonq_version();" # Should output 0.4.0
+php -r "echo jsonq_version();" # Should output 0.4.1
 
 # Quick test
 php -r "

@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.4.0)
+# JsonQ API Reference (v0.4.1)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
