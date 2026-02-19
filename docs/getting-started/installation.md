@@ -36,10 +36,10 @@ Download from [GitHub Releases](https://github.com/mameyugo/JsonQ/releases/lates
 
 ```bash
 # Download (replace version and PHP version as needed)
-wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.0/php8.3-jsonq_0.4.0-1_amd64.deb
+wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.1/php8.3-jsonq_0.4.1-1_amd64.deb
 
 # Install
-sudo dpkg -i php8.3-jsonq_0.4.0-1_amd64.deb
+sudo dpkg -i php8.3-jsonq_0.4.1-1_amd64.deb
 sudo apt install -f    # fix dependencies if needed
 ```
 
@@ -49,10 +49,10 @@ Download the appropriate binary for your system from [GitHub Releases](https://g
 
 ```bash
 # Example for Linux x86_64 with PHP 8.3
-wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.0/jsonq-v0.4.0-linux-x86_64-php8.3.so
+wget https://github.com/mameyugo/JsonQ/releases/download/v0.4.1/jsonq-v0.4.1-linux-x86_64-php8.3.so
 
 # Copy to PHP extension directory
-sudo cp jsonq-v0.4.0-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
+sudo cp jsonq-v0.4.1-linux-x86_64-php8.3.so $(php-config --extension-dir)/jsonq.so
 
 # Create configuration file
 echo "extension=jsonq.so" | sudo tee /etc/php/8.3/mods-available/jsonq.ini
