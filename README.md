@@ -89,7 +89,7 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 - ✅ **Compression** - Transparent Gzip/Zstd support
 - ✅ **Query Optimizer** - Intelligent index selection for complex queries
 
-### Collection Methods *(NEW - v0.3.1)*
+### Collection Methods *(NEW - v0.3.2)*
 - ✅ **`select(fields)`** - Project specific fields (whitelist)
 - ✅ **`except(fields)`** - Exclude specific fields (blacklist)
 - ✅ **`column(field)`** - Extract values from single column

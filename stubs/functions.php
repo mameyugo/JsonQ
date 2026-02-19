@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.3.1
+ * @version 0.3.2
  * @license The PHP License, version 3.01
  */
 
