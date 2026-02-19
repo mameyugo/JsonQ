@@ -12,7 +12,7 @@
 /**
  * Get the JsonQ extension version.
  *
- * @return string Semantic version string (e.g., "0.3.1")
+ * @return string Semantic version string (e.g., "0.3.2")
  */
 function jsonq_version(): string {}
 
