@@ -13,6 +13,7 @@ pub mod security;
 pub mod store;
 pub mod utils;
 pub mod validation;
+pub mod stream;
 
 #[cfg(test)]
 pub mod php;
@@ -36,6 +37,7 @@ use store::options::CompressionMethod;
 use store::StoreInner;
 use utils::{merge_values, search_in_value, value_key};
 use validation::validate;
+use crate::stream::{StreamReader, StreamFilter, FilteredStream};
 
 // ══════════ HELPERS ══════════
 
@@ -803,6 +805,197 @@ impl JsonStore {
         ))
     }
 
+    #[php(name = "stream")]
+    pub fn stream(&self, pointer: String, conditions: Option<&Zval>, options: Option<&Zval>) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        
+        let mut filter = StreamFilter::new();
+        if let Some(cond) = conditions {
+            filter = filter.with_conditions(zval_to_value(cond));
+        }
+        
+        if let Some(opts) = options {
+             let opt_val = zval_to_value(opts);
+             if let Some(obj) = opt_val.as_object() {
+                 if let Some(l) = obj.get("limit").and_then(|v| v.as_u64()) {
+                     filter = filter.with_limit(l as usize);
+                 }
+                 if let Some(s) = obj.get("skip").and_then(|v| v.as_u64()) {
+                     filter = filter.with_skip(s as usize);
+                 }
+                 if let Some(sel) = obj.get("select").and_then(|v| v.as_array()) {
+                     let fields: Vec<String> = sel.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+                     filter = filter.with_select(fields);
+                 }
+             }
+        }
+
+        let reader = StreamReader::new(&i.path.to_string_lossy(), &pointer)
+            .map_err(|e| PhpException::from(e.to_string()))?;
+            
+        let stream = FilteredStream::new(reader, filter);
+        
+        let mut results = Vec::new();
+        for item in stream {
+            match item {
+                Ok(val) => results.push(val),
+                Err(e) => return Err(PhpException::from(e.to_string()).into()),
+            }
+        }
+        
+        Ok(value_to_zval(&Value::Array(results)))
+    }
+
+    #[php(name = "streamCount")]
+    pub fn stream_count(&self, pointer: String, conditions: Option<&Zval>) -> PhpResult<i64> {
+         let i = self.inner.as_ref().ok_or("Not init")?;
+         
+        let mut filter = StreamFilter::new();
+        if let Some(cond) = conditions {
+            filter = filter.with_conditions(zval_to_value(cond));
+        }
+        
+        let reader = StreamReader::new(&i.path.to_string_lossy(), &pointer)
+            .map_err(|e| PhpException::from(e.to_string()))?;
+            
+        let stream = FilteredStream::new(reader, filter);
+        
+        let mut count = 0;
+        for item in stream {
+             match item {
+                Ok(_) => count += 1,
+                Err(e) => return Err(PhpException::from(e.to_string()).into()),
+            }
+        }
+        Ok(count)
+    }
+    
+    #[php(name = "streamToFile")]
+    pub fn stream_to_file(&self, pointer: String, output_path: String, conditions: Option<&Zval>, options: Option<&Zval>) -> PhpResult<i64> {
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        
+        let mut filter = StreamFilter::new();
+        if let Some(cond) = conditions {
+            filter = filter.with_conditions(zval_to_value(cond));
+        }
+        
+        let mut pretty = false;
+        if let Some(opts) = options {
+             let opt_val = zval_to_value(opts);
+             if let Some(obj) = opt_val.as_object() {
+                 if let Some(l) = obj.get("limit").and_then(|v| v.as_u64()) {
+                     filter = filter.with_limit(l as usize);
+                 }
+                 if let Some(s) = obj.get("skip").and_then(|v| v.as_u64()) {
+                     filter = filter.with_skip(s as usize);
+                 }
+                 if let Some(sel) = obj.get("select").and_then(|v| v.as_array()) {
+                     let fields: Vec<String> = sel.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+                     filter = filter.with_select(fields);
+                 }
+                 if let Some(p) = obj.get("pretty").and_then(|v| v.as_bool()) {
+                     pretty = p;
+                 }
+             }
+        }
+        
+        let reader = StreamReader::new(&i.path.to_string_lossy(), &pointer)
+            .map_err(|e| PhpException::from(e.to_string()))?;
+        let stream = FilteredStream::new(reader, filter);
+        
+        let file = fs::File::create(&output_path)
+            .map_err(|e| PhpException::from(format!("Cannot create output file: {}", e)))?;
+        let mut writer = std::io::BufWriter::new(file);
+        
+        // Write JSON array manually
+        writer.write_all(b"[").map_err(|e| PhpException::from(e.to_string()))?;
+        
+        let mut first = true;
+        let mut count = 0;
+        
+        for item in stream {
+            match item {
+                Ok(val) => {
+                    if !first {
+                        writer.write_all(b",").map_err(|e| PhpException::from(e.to_string()))?;
+                    }
+                    if pretty {
+                        // Standard pretty print might not align perfectly with manual array, but it's acceptable
+                        // serde_json::to_writer_pretty writes the value.
+                        if !first { writer.write_all(b"\n").unwrap_or(()); }
+                        serde_json::to_writer_pretty(&mut writer, &val)
+                    } else {
+                        serde_json::to_writer(&mut writer, &val)
+                    }
+                    .map_err(|e| PhpException::from(e.to_string()))?;
+                    
+                    first = false;
+                    count += 1;
+                },
+                Err(e) => return Err(PhpException::from(e.to_string()).into()),
+            }
+        }
+        
+        if pretty && !first {
+             writer.write_all(b"\n").unwrap_or(());
+        }
+        writer.write_all(b"]").map_err(|e| PhpException::from(e.to_string()))?;
+        writer.flush().map_err(|e| PhpException::from(e.to_string()))?;
+        
+        Ok(count)
+    }
+
+    #[php(name = "streamAggregate")]
+    pub fn stream_aggregate(&self, pointer: String, operation: String, field: String, conditions: Option<&Zval>) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or("Not init")?;
+        
+        let mut filter = StreamFilter::new();
+        if let Some(cond) = conditions {
+            filter = filter.with_conditions(zval_to_value(cond));
+        }
+        
+        let reader = StreamReader::new(&i.path.to_string_lossy(), &pointer)
+            .map_err(|e| PhpException::from(e.to_string()))?;
+        let stream = FilteredStream::new(reader, filter);
+        
+        let mut count = 0;
+        let mut sum = 0.0;
+        let mut min = f64::INFINITY;
+        let mut max = f64::NEG_INFINITY;
+        
+        for item_res in stream {
+            match item_res {
+                Ok(item) => {
+                     match operation.as_str() {
+                         "count" => count += 1,
+                         _ => {
+                             if let Some(val) = read_nested(&item, &field) {
+                                 if let Some(n) = val.as_f64() {
+                                     sum += n;
+                                     if n < min { min = n; }
+                                     if n > max { max = n; }
+                                     if operation.as_str() == "avg" { count += 1; }
+                                 }
+                             }
+                         }
+                     }
+                },
+                Err(e) => return Err(PhpException::from(e.to_string()).into()),
+            }
+        }
+        
+        let result = match operation.as_str() {
+            "sum" => json!(sum),
+            "avg" => if count > 0 { json!(sum / count as f64) } else { json!(0) },
+            "min" => if min == f64::INFINITY { Value::Null } else { json!(min) },
+            "max" => if max == f64::NEG_INFINITY { Value::Null } else { json!(max) },
+            "count" => json!(count),
+            _ => return Err(PhpException::from(format!("Invalid operation: {}", operation)).into()),
+        };
+        
+        Ok(value_to_zval(&result))
+    }
+
     #[php(name = "appendJsonl")]
     pub fn append_jsonl(&self, record: &Zval) -> PhpResult<bool> {
         let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
@@ -1122,6 +1315,18 @@ pub fn jsonq_query(path: String, query: String) -> PhpResult<Vec<String>> {
     jsonq_query_node(path, query)
 }
 
+#[php_function]
+pub fn jsonq_stream(path: String, pointer: String, conditions: Option<&Zval>, options: Option<&Zval>) -> PhpResult<Zval> {
+    let store = JsonStore::__construct(path);
+    store.stream(pointer, conditions, options)
+}
+
+#[php_function]
+pub fn jsonq_stream_count(path: String, pointer: String, conditions: Option<&Zval>) -> PhpResult<i64> {
+     let store = JsonStore::__construct(path);
+     store.stream_count(pointer, conditions)
+}
+
 #[php_module]
 pub fn get_module(module: ModuleBuilder) -> ModuleBuilder {
     // ✅ Initialize global configuration
@@ -1148,6 +1353,8 @@ pub fn get_module(module: ModuleBuilder) -> ModuleBuilder {
         .function(wrap_function!(jsonq_read_jsonl))
         .function(wrap_function!(jsonq_memory_stats))
         .function(wrap_function!(jsonq_query_node))
-        .function(wrap_function!(jsonq_query)) // Alias for robustness test
+        .function(wrap_function!(jsonq_query))
+        .function(wrap_function!(jsonq_stream))
+        .function(wrap_function!(jsonq_stream_count))
         .class::<JsonStore>()
 }

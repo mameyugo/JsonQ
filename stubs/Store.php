@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.3.2
+ * @version 0.4.0
  * @license The PHP License, version 3.01
  */
 
@@ -489,4 +489,38 @@ class Store
      * @return string[] Array of JSON strings
      */
     public function readJsonl(): array {}
+    /**
+     * Stream items from a JSON array at the given JSON Pointer path.
+     *
+     * @param string $pointer    JSON Pointer (RFC 6901), e.g. "/users"
+     * @param array|null  $conditions MongoDB-style conditions (optional)
+     * @param array|null  $options    ['limit' => int, 'skip' => int, 'select' => string[], 'pretty' => bool]
+     * @return array
+     */
+    public function stream(string $pointer, ?array $conditions = null, ?array $options = null): array {}
+
+    /**
+     * @param string $pointer
+     * @param array|null  $conditions
+     * @return int
+     */
+    public function streamCount(string $pointer, ?array $conditions = null): int {}
+
+    /**
+     * @param string $pointer
+     * @param string $outputPath
+     * @param array|null  $conditions
+     * @param array|null  $options ['limit', 'skip', 'select', 'pretty']
+     * @return int Items written
+     */
+    public function streamToFile(string $pointer, string $outputPath, ?array $conditions = null, ?array $options = null): int {}
+
+    /**
+     * @param string $pointer
+     * @param string $operation 'sum'|'avg'|'min'|'max'|'count'
+     * @param string $field
+     * @param array|null  $conditions
+     * @return float|int
+     */
+    public function streamAggregate(string $pointer, string $operation, string $field, ?array $conditions = null): float|int {}
 }

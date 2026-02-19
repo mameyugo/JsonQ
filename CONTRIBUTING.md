@@ -135,7 +135,7 @@ If you need to create a release without pushing a new tag (e.g., to rebuild bina
 3. Select the branch (usually `main`)
 4. Click "Run workflow"
 
-The release will be created using the version specified in `Cargo.toml` (e.g., version `0.3.2` -> tag `v0.3.2`).
+The release will be created using the version specified in `Cargo.toml` (e.g., version `0.4.0` -> tag `v0.4.0`).
 
 **Note**: If a release with that version already exists, it will be updated with the new binaries. This is useful for rebuilding releases without changing the version number.
 

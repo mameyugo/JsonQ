@@ -1,6 +1,6 @@
 [package]
 name = "jsonq"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 authors = ["Mameyugo <info@mameyugo.com>"]
 description = "High-performance JSON file storage engine for PHP, powered by Rust"

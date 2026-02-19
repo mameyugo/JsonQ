@@ -13,6 +13,8 @@
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Benchmarks](#-performance) • [Contributing](#-contributing)
 
+Version: **0.4.0**
+
 </div>
 
 ---
@@ -41,7 +43,9 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 - ✅ **Atomic Writes** (tmp + fsync + rename) for crash safety
 - ✅ **Memory-mapped I/O** for zero-copy reads
 - ✅ **Arc-based Caching** with mtime invalidation
-- ✅ **Compression Support** (Gzip, Zstd) - *v0.3.0*
+- ✅ **Compression Support** (Gzip, Zstd) - *v0.3.2*
+- ✅ **Native Streaming** (v0.4.0) - Iterate gigabytes of data with low memory
+- ✅ **Stream Filtering** - Apply MongoDB-style queries while streaming
 
 ### Query Engine
 - ✅ **MongoDB-style Matching**: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`
@@ -49,8 +53,8 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 - ✅ **Logical Operators**: `$and`, `$or`, `$not`, `$nor`
 - ✅ **Array Operators**: `$size`, `$all`, `$elemMatch`
 - ✅ **Type Checking**: `$exists`, `$type`
-- ✅ **Field Projection**: `select()` for whitelisting fields - *v0.3.0*
-- ✅ **Query Optimizer**: Intelligent index selection - *v0.3.0*
+- ✅ **Field Projection**: `select()` for whitelisting fields - *v0.3.2*
+- ✅ **Query Optimizer**: Intelligent index selection - *v0.3.2*
 
 ### Fluent Query Builder
 - ✅ **Chainable Methods**: `where()`, `orWhere()`, `orderBy()`, `limit()`, `skip()`

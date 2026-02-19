@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.3.2)
+# JsonQ API Reference (v0.4.0)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
@@ -6,6 +6,7 @@ Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` func
 
 - [Constructor](#constructor)
 - [Read Operations](#read-operations)
+- [Streaming Operations](#streaming-operations)
 - [Write Operations](#write-operations)
 - [Query Operations](#query-operations)
 - [Aggregation](#aggregation)
@@ -73,6 +74,55 @@ Returns the top-level keys of an object at the given path. Pass an empty string 
 ```php
 $store->keys('');        // ['users', 'config', ...]
 $store->keys('config');  // ['debug', 'version', ...]
+```
+
+---
+
+## Streaming Operations
+
+### `stream(string $pointer, ?array $conditions = null, ?array $options = null): array`
+
+Streams items from a JSON array at a specific pointer, applying optional filters. Extremely memory-efficient.
+
+```php
+// Stream all users
+$users = $store->stream('/users');
+
+// Stream with filter and options
+$admins = $store->stream('/users',
+    ['role' => 'admin'],
+    ['limit' => 100, 'select' => ['id', 'email']]
+);
+```
+
+**Options:**
+- `limit` (int): Max items to return.
+- `skip` (int): Items to skip.
+- `select` (string[]): Fields to include.
+
+### `streamCount(string $pointer, ?array $conditions = null): int`
+
+Counts items in a stream without loading them all into memory.
+
+```php
+$count = $store->streamCount('/logs', ['level' => 'error']);
+```
+
+### `streamToFile(string $pointer, string $outputPath, ?array $conditions = null, ?array $options = null): int`
+
+Streams filtered items directly to a new file.
+
+```php
+$store->streamToFile('/users', '/tmp/admins.json', ['role' => 'admin']);
+```
+
+### `streamAggregate(string $pointer, string $op, string $field, ?array $conditions = null): number`
+
+Performs aggregation on a stream.
+**Ops:** `sum`, `avg`, `min`, `max`, `count`.
+
+```php
+$total = $store->streamAggregate('/orders', 'sum', 'amount');
 ```
 
 ---
