@@ -10,7 +10,7 @@
  * In production, the native Rust extension provides the real implementations.
  *
  * @package  JsonQ
- * @version  0.3.2
+ * @version  0.4.0
  * @license  The PHP License, version 3.01
  * @link     https://github.com/mameyugo/JsonQ
  */
@@ -27,7 +27,7 @@ if (!extension_loaded('jsonq')) {
     /**
      * Get the JsonQ extension version.
      *
-     * @return string Semantic version string (e.g., "0.3.2")
+     * @return string Semantic version string (e.g., "0.4.0")
      */
     function jsonq_version(): string
     {

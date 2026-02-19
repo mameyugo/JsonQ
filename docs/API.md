@@ -497,5 +497,5 @@ $store->restore('/backups/snap.json');
 Returns the extension version string.
 
 ```php
-echo jsonq_version(); // "0.3.2"
+echo jsonq_version(); // "0.4.0"
 ```
