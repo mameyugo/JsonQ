@@ -58,10 +58,94 @@ if php -m 2>/dev/null | grep -q jsonq; then
     fi
 fi
 
+# ── FIX: Función centralizada para habilitar y recargar la extensión ──
+# Se llama siempre después de instalar el .deb, tanto por APT como por descarga directa.
+enable_and_reload() {
+    local php_ver="$1"
+
+    echo -e "\n${CYAN}→ Enabling extension for all SAPIs...${NC}"
+
+    # phpenmod habilita para cli, fpm, apache2 y cualquier otro SAPI registrado
+    if command -v phpenmod > /dev/null 2>&1; then
+        phpenmod -v "$php_ver" jsonq && \
+            echo -e "${GREEN}✓${NC} phpenmod: extension enabled for all SAPIs (cli, fpm, apache2…)"
+    else
+        # Fallback manual: crear symlinks en cada conf.d que exista
+        for sapi_dir in /etc/php/${php_ver}/*/conf.d; do
+            if [ -d "$sapi_dir" ]; then
+                sapi=$(basename "$(dirname "$sapi_dir")")
+                ln -sf "/etc/php/${php_ver}/mods-available/jsonq.ini" \
+                       "${sapi_dir}/20-jsonq.ini" 2>/dev/null || true
+                echo -e "${GREEN}✓${NC} Linked for SAPI: ${sapi}"
+            fi
+        done
+    fi
+
+    # ── FIX: Reiniciar php-fpm si está activo ──
+    if systemctl is-active --quiet "php${php_ver}-fpm" 2>/dev/null; then
+        systemctl restart "php${php_ver}-fpm" && \
+            echo -e "${GREEN}✓${NC} php${php_ver}-fpm restarted"
+    fi
+
+    # ── FIX: Reiniciar Apache si está activo ──
+    # El postinst del .deb no lo hace; es necesario para mod_php y php-fpm vía Apache
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        systemctl restart apache2 && \
+            echo -e "${GREEN}✓${NC} apache2 restarted"
+    elif systemctl is-active --quiet httpd 2>/dev/null; then
+        systemctl restart httpd && \
+            echo -e "${GREEN}✓${NC} httpd restarted"
+    fi
+
+    # ── FIX: Reiniciar nginx si está activo ──
+    # nginx no ejecuta PHP directamente pero puede depender de fpm; un reload basta
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        systemctl reload nginx && \
+            echo -e "${GREEN}✓${NC} nginx reloaded"
+    fi
+}
+
+# ── FIX: Función para verificar que la extensión quedó activa ──
+verify_installation() {
+    local php_ver="$1"
+    local ok=true
+
+    echo -e "\n${CYAN}→ Verifying installation...${NC}"
+
+    # CLI
+    if php -m 2>/dev/null | grep -q jsonq; then
+        VERSION=$(php -r "echo jsonq_version();" 2>/dev/null || echo "?")
+        echo -e "${GREEN}✓${NC} CLI:    JsonQ v${VERSION} loaded"
+    else
+        echo -e "${YELLOW}⚠${NC} CLI:    extension NOT detected in php -m"
+        echo "         Check: php --ini | grep mods-available"
+        ok=false
+    fi
+
+    # FPM (si el socket/servicio está disponible)
+    if command -v php-fpm${php_ver} > /dev/null 2>&1 || \
+       systemctl is-active --quiet "php${php_ver}-fpm" 2>/dev/null; then
+        if php-fpm${php_ver} -m 2>/dev/null | grep -q jsonq; then
+            echo -e "${GREEN}✓${NC} FPM:    extension loaded"
+        else
+            echo -e "${YELLOW}⚠${NC} FPM:    extension NOT detected"
+            ok=false
+        fi
+    fi
+
+    # Resumen
+    if [ "$ok" = true ]; then
+        echo -e "\n${GREEN}✅ All checks passed!${NC}"
+    else
+        echo -e "\n${YELLOW}⚠ Some SAPIs may not have the extension active.${NC}"
+        echo "  Run: php -m | grep jsonq"
+        echo "  Or check: ls /etc/php/${php_ver}/*/conf.d/ | grep jsonq"
+    fi
+}
+
 # ── Method 1: Try APT repository ──
 echo -e "\n${CYAN}→ Setting up APT repository...${NC}"
 
-# Check if GPG key exists (to determine if we can use signed repo)
 SIGNED_REPO=false
 if curl -fsSL -I "${REPO_URL}/jsonq-archive-keyring.gpg" >/dev/null 2>&1; then
     SIGNED_REPO=true
@@ -71,7 +155,7 @@ if [ "$SIGNED_REPO" = true ]; then
     if curl -fsSL "${REPO_URL}/jsonq-archive-keyring.gpg" -o /tmp/jsonq-keyring.gpg 2>/dev/null; then
         gpg --dearmor -o /usr/share/keyrings/jsonq-archive-keyring.gpg < /tmp/jsonq-keyring.gpg 2>/dev/null || \
             cp /tmp/jsonq-keyring.gpg /usr/share/keyrings/jsonq-archive-keyring.gpg
-        
+
         echo "deb [signed-by=/usr/share/keyrings/jsonq-archive-keyring.gpg] ${REPO_URL} stable main" \
             > /etc/apt/sources.list.d/jsonq.list
     fi
@@ -87,8 +171,10 @@ PKG="php${PHP_VERSION}-jsonq"
 if apt-cache show "$PKG" > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC} Package found in APT repository"
     apt-get install -y "$PKG"
-    echo -e "\n${GREEN}✅ JsonQ installed successfully via APT!${NC}"
-    php -r "echo '   Version: ' . jsonq_version() . PHP_EOL;"
+    # FIX: el postinst del .deb ya llama a phpenmod, pero Apache no se reinicia ahí
+    enable_and_reload "$PHP_VERSION"
+    verify_installation "$PHP_VERSION"
+    echo -e "\n${CYAN}Verify:${NC} php -r \"echo jsonq_version();\""
     exit 0
 fi
 
@@ -97,13 +183,12 @@ echo -e "${YELLOW}⚠ Package not found in APT repo, trying direct download...${
 # ── Method 2: Direct .deb download from GitHub Releases ──
 echo -e "\n${CYAN}→ Downloading from GitHub Releases...${NC}"
 
-# Try to get latest release tag
-# Fallback to listing releases if 'latest' endpoint is 404 (happens with pre-releases only)
-LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/mameyugo/JsonQ/releases/latest" 2>/dev/null | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/' || echo "")
+LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/mameyugo/JsonQ/releases/latest" 2>/dev/null \
+    | grep '"tag_name"' | sed 's/.*"v\(.*\)".*/\1/' || echo "")
 
 if [ -z "$LATEST_TAG" ]; then
-    # Fallback to just getting the first release in the list
-    LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/mameyugo/JsonQ/releases?per_page=1" 2>/dev/null | grep '"tag_name"' | head -1 | sed 's/.*"v\(.*\)".*/\1/' || echo "")
+    LATEST_TAG=$(curl -fsSL "https://api.github.com/repos/mameyugo/JsonQ/releases?per_page=1" 2>/dev/null \
+        | grep '"tag_name"' | head -1 | sed 's/.*"v\(.*\)".*/\1/' || echo "")
 fi
 
 if [ -z "$LATEST_TAG" ]; then
@@ -118,23 +203,20 @@ DEB_URL="${GITHUB_RELEASES}/download/v${LATEST_TAG}/${DEB_FILE}"
 echo "  Downloading ${DEB_FILE}..."
 if curl -fsSL "$DEB_URL" -o "/tmp/${DEB_FILE}"; then
     if dpkg -i "/tmp/${DEB_FILE}"; then
-         rm -f "/tmp/${DEB_FILE}"
-         echo -e "\n${GREEN}✅ JsonQ v${LATEST_TAG} installed successfully!${NC}"
-         php -r "echo '   Version: ' . jsonq_version() . PHP_EOL;"
+        rm -f "/tmp/${DEB_FILE}"
     else
         echo -e "${YELLOW}⚠ dpkg failed, trying to fix dependencies...${NC}"
         apt-get install -f -y
-        # Re-try install
         dpkg -i "/tmp/${DEB_FILE}"
         rm -f "/tmp/${DEB_FILE}"
-        echo -e "\n${GREEN}✅ JsonQ v${LATEST_TAG} installed successfully!${NC}"
-        php -r "echo '   Version: ' . jsonq_version() . PHP_EOL;"
     fi
+    # FIX: habilitar y recargar todos los SAPIs (incluido Apache)
+    enable_and_reload "$PHP_VERSION"
+    verify_installation "$PHP_VERSION"
+    echo -e "\n${CYAN}Verify:${NC} php -r \"echo jsonq_version();\""
 else
     echo -e "${RED}✗ Download failed (404). File might not exist for this PHP version/Architecture.${NC}"
     echo "  Tried: ${DEB_URL}"
     echo "  Available packages at: ${GITHUB_RELEASES}/latest"
     exit 1
 fi
-
-echo -e "\n${CYAN}Verify:${NC} php -r \"echo jsonq_version();\""

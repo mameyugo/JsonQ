@@ -5,14 +5,14 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.3.1
+ * @version 0.4.1
  * @license The PHP License, version 3.01
  */
 
 /**
  * Get the JsonQ extension version.
  *
- * @return string Semantic version string (e.g., "0.3.1")
+ * @return string Semantic version string (e.g., "0.4.1")
  */
 function jsonq_version(): string {}
 
@@ -125,3 +125,25 @@ function jsonq_query_node(string $path, string $query_path): array {}
  * @return string[]
  */
 function jsonq_query(string $path, string $query): array {}
+
+/**
+ * Stream items from a JSON file at a JSON Pointer path.
+ * Standalone function version of JsonStore::stream().
+ *
+ * @param string $path       Path to the JSON file
+ * @param string $pointer    JSON Pointer path
+ * @param array|null  $conditions Optional filter conditions
+ * @param array|null  $options    Optional: ['limit', 'skip', 'select']
+ * @return array
+ */
+function jsonq_stream(string $path, string $pointer, ?array $conditions = null, ?array $options = null): array {}
+
+/**
+ * Count items in a streamed JSON file.
+ *
+ * @param string $path       Path to the JSON file
+ * @param string $pointer    JSON Pointer path
+ * @param array|null  $conditions Optional filter conditions
+ * @return int
+ */
+function jsonq_stream_count(string $path, string $pointer, ?array $conditions = null): int {}

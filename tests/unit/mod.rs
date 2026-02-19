@@ -13,5 +13,6 @@ mod index;
 mod path;
 mod query;
 mod store;
+mod stream;
 mod utils;
 mod validation;

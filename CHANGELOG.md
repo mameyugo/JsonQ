@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-02-19
+
+### Fixed
+
+- **Stream Object Handling**: `stream()` now correctly returns an empty stream when pointing to an object instead of throwing an error. This allows safe iteration even if the target is not an array.
+- **Unit Tests**: Added comprehensive unit tests for `StreamReader`, `StreamFilter`, and `JsonPointer`.
+- **StreamFilter API**: Added public `apply()` method to `StreamFilter`.
+
+## [0.4.0] - 2026-02-19
+
+### Added
+
+- **Native Streaming Engine**
+  - `stream(pointer, conditions, options)`: Memory-efficient iteration over large datasets.
+  - `streamCount(pointer, conditions)`: Count items without loading.
+  - `streamToFile(pointer, output, conditions)`: Export filtered data to file.
+  - `streamAggregate(pointer, op, field)`: Aggregations on streams (sum, avg, min, max).
+- **RFC 6901 JSON Pointer**: Full support for standard JSON navigation (e.g., `/users/0/profile`).
+- **Stream Filters**: Apply MongoDB-style query filters directly during streaming.
+
+## [0.3.2] - 2026-02-16
+
+### Changed
+
+- **Polished installation process**:
+  - `composer.json` type changed to `library` to allow easier installation as a wrapper.
+  - Automatically loads stubs for better IDE support.
+  - Improved `install.sh` to handle extension enabling and service restarting (Apache/FPM) more robustly.
+
 ## [0.3.1] - 2026-02-16
 
 ### Added
