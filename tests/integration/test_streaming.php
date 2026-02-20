@@ -4,7 +4,6 @@
  *
  * Este script prueba las funcionalidades de stream memory-efficient:
  * Requiere: JsonQ extension >= 0.5.0
- */
  * Usage: php -d "extension=/path/to/jsonq.so" tests/integration/test_streaming.php
  */
 
