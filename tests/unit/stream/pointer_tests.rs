@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use jsonq::stream::pointer::JsonPointer;
+    use jsonq::stream::JsonPointer;
 
     #[test]
     fn test_parse_empty_is_root() {

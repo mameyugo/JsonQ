@@ -148,26 +148,13 @@ impl<'de> Visitor<'de> for StreamVisitor {
     {
         if self.tokens.is_empty() {
             // Reached target object: since we are in streaming mode,
-            // we should probably yield ONE ITEM (the whole object).
-            // But we need to reconstruct the Map value from access manually...
-            // Or simpler: We can't easily reconstruct Value from MapAccess without consuming it.
+            // returning a single object as an array of items is complex here
+            // because we can't easily turn `MapAccess` back into `Value::Object`
+            // and emit it without fully consuming it into memory.
             // 
-            // Issue: We are implementing Visitor manually, so we are "inside".
-            // To get a Value, we need to define how to visit it.
-            // But we can't just call `map.next_value()` without a key.
-            //
-            // Solution: This branch (tokens empty) shouldn't be reached via `visit_map` of the StreamVisitor strictly speaking?
-            // Wait, if I call `deserializer.deserialize_any(visitor)`, and it's a map, `visit_map` is called.
-            // If `tokens` is empty, it means user asked to stream `/some/obj`.
-            // We want to return that object as ONE item.
-            // But we can't easily turn `MapAccess` back into `Value::Object`.
-            // `serde_json::Value`'s visitor does that.
-            //
-            // Hack: Return error saying "Streaming object not supported, please point to an array"
-            // OR: We accept that streaming a single object yields nothing? No.
-            //
-            // Correct approach: Since we can't easily delegate back to Value's visitor from here without value...
-            // Silently consume the object and return empty stream (for stream() method consistency)
+            // Consistent behavior: a stream expects an array. Pointing to an object
+            // yields an empty stream (0 items).
+            // Silently consume the object and return an empty stream.
             while map.next_entry::<de::IgnoredAny, de::IgnoredAny>()?.is_some() {}
             return Ok(());
         }

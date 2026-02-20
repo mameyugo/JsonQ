@@ -143,6 +143,15 @@ stream_test('stream deep nested pointer /company/departments/0/staff', function(
     stream_assert_eq('Alice', $staff[0]['name'], 'first staff name');
 });
 
+stream_test('stream on object (not array) at pointer', function() use ($tmpDir) {
+    $path = "{$tmpDir}/nested.json";
+    create_nested_json($path);
+    $store = new JsonQ\Store($path);
+    $items = $store->stream('/company'); // company is an object
+    stream_assert(is_array($items), 'always returns array');
+    stream_assert_eq(0, count($items), 'object returns empty stream');
+});
+
 stream_test('stream pointer with tilde escaping (~0 ~1)', function() use ($tmpDir) {
     $path = "{$tmpDir}/tilde.json";
     // JSON key "a/b" and "a~b"
@@ -338,6 +347,23 @@ stream_test('streamAggregate sum matches PHP calculation', function() use ($tmpD
     $manualSum = array_sum(array_column($data['users'], 'score'));
     
     stream_assert($manualSum == $streamSum, "stream sum ({$streamSum}) must match PHP array_sum ({$manualSum})");
+});
+
+stream_test('streamAggregate avg specific edge case (missing fields)', function() use ($tmpDir) {
+    $path = "{$tmpDir}/avg_edge.json";
+    $data = [
+        ['id' => 1, 'score' => 10],
+        ['id' => 2, 'name' => 'Bob'], // No score
+        ['id' => 3, 'score' => 20],
+        ['id' => 4, 'score' => 'invalid'], // Not a number
+    ];
+    file_put_contents($path, json_encode(['points' => $data]));
+    
+    $store = new JsonQ\Store($path);
+    $avg = $store->streamAggregate('/points', 'avg', 'score');
+    
+    // Should be (10 + 20) / 2 = 15. The missing and invalid ones are skipped.
+    stream_assert_eq(15, (int)$avg, 'average of valid scores');
 });
 
 

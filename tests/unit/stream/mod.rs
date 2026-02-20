@@ -1,5 +1,5 @@
 //! Unit tests for stream module
 
-mod pointer_tests;
-mod reader_tests;
-mod filter_tests;
+pub mod pointer_tests;
+pub mod reader_tests;
+pub mod filter_tests;

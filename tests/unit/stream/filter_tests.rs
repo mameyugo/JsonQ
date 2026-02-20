@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use jsonq::stream::filter::StreamFilter;
+    use jsonq::stream::StreamFilter;
     use serde_json::json;
 
     #[test]
