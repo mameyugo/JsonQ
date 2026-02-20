@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         testdox="true">
+
+    <testsuites>
+        <testsuite name="Hydrator">
+            <!-- Tests sin extensión — PHPUnit puro -->
+            <file>tests/php/HydratorTest.php</file>
+        </testsuite>
+        <testsuite name="HydratableStore">
+            <!-- Tests con extensión cargada — requiere php_ini -->
+            <file>tests/php/HydratableStoreTest.php</file>
+        </testsuite>
+    </testsuites>
+
+    <php>
+        <!-- Sobrescribir si necesitas que la extensión esté cargada para la suite completa -->
+        <!-- <ini name="extension" value="jsonq"/> -->
+    </php>
+
+    <source>
+        <include>
+            <directory>php</directory>
+        </include>
+    </source>
+</phpunit>

@@ -1,10 +1,10 @@
 <?php
 /**
- * JsonQ v0.4.1 — Streaming Tests
+ * JsonQ v0.5.0 — Streaming Tests
  *
- * Tests para el módulo de streaming nativo con JSON Pointer RFC 6901.
- * Requiere: JsonQ extension >= 0.4.1
- *
+ * Este script prueba las funcionalidades de stream memory-efficient:
+ * Requiere: JsonQ extension >= 0.5.0
+ */
  * Usage: php -d "extension=/path/to/jsonq.so" tests/integration/test_streaming.php
  */
 
@@ -371,7 +371,7 @@ stream_test('streamAggregate avg specific edge case (missing fields)', function(
 // SUMMARY
 // ══════════════════════════════════════════════════════════
 echo "\n══════════════════════════════════════════\n";
-echo "  Streaming Tests v0.4.1\n";
+echo "  Streaming Tests v0.5.0\n";
 echo "  ✅ Passed: {$passCount}\n";
 echo "  ❌ Failed: {$failCount}\n";
 echo "══════════════════════════════════════════\n";

@@ -13,7 +13,7 @@
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Benchmarks](#-performance) • [Contributing](#-contributing)
 
-Version: **0.4.1**
+Version: **0.5.0**
 
 </div>
 
@@ -93,7 +93,7 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 - ✅ **Compression** - Transparent Gzip/Zstd support
 - ✅ **Query Optimizer** - Intelligent index selection for complex queries
 
-### Collection Methods *(NEW - v0.3.2)*
+### Collection Methods *(v0.3.2)*
 - ✅ **`select(fields)`** - Project specific fields (whitelist)
 - ✅ **`except(fields)`** - Exclude specific fields (blacklist)
 - ✅ **`column(field)`** - Extract values from single column
@@ -102,6 +102,14 @@ JsonQ is a **blazing-fast PHP extension** written in Rust that provides a file-b
 - ✅ **`keys(path)`** - Get object keys
 - ✅ **`values(path)`** - Get object values
 - ✅ **`toJson(pretty)`** - Serialize results to JSON string
+
+### Object Hydration *(NEW - v0.5.0)*
+- ✅ **Automatic Mapping** - Map JSON arrays directly into typed PHP 8.1+ objects
+- ✅ **Typed Arrays** - Support for hydrating `array<ClassName>` via `#[Type]` attribute
+- ✅ **HydratableStore** - Native extension wrapper with `findOneAs`, `findInAs`, `streamAs`
+- ✅ **Type Coercion** - Configurable `STRICT` and `LENIENT` coercion modes
+- ✅ **Round-trip Dehydration** - Convert PHP objects back into JSON natively
+- 📖 [Learn more about Object Hydration](docs/HYDRATOR.md)
 
 > **Legend**: ✅ Confirmed | ⏳ Pending verification
 
@@ -415,6 +423,29 @@ $values = $store->values('user.profile');
 // Serialize to JSON
 $json = $store->toJson('users');
 $prettyJson = $store->toJson('users', true); // Pretty-print
+```
+
+---
+
+### Native Streaming *(NEW - v0.4.0)*
+
+Process large JSON structures without loading everything into memory.
+
+```php
+// Stream array items (or object properties) one by one
+$users = $store->stream('/logs');
+
+// Stream with on-the-fly MongoDB-style filtering
+$errors = $store->stream('/logs', 
+    ['level' => 'error'], // Conditions
+    ['limit' => 500, 'select' => ['message', 'timestamp']] // Options
+);
+
+// Stream directly to a new file (zero memory overhead)
+$store->streamToFile('/backups', '/tmp/recent.json', ['date' => ['$gt' => '2025-01-01']]);
+
+// Perform aggregate math over a stream
+$totalSales = $store->streamAggregate('/orders', 'sum', 'amount', ['status' => 'completed']);
 ```
 
 ---
@@ -742,23 +773,19 @@ JsonQ is licensed under [The PHP License, version 3.01](LICENSE).
 
 ## 🗺️ Roadmap
 
-### v0.4.0 (Q2 2026)
-- [ ] Complete collection methods (`except`, `column`, `chunk`, `implode`, `keys`, `values`, `toJson`)
-- [ ] JSONPath full support
-- [ ] Query optimizer improvements
-- [ ] Multi-stage aggregation pipelines
-
-### v0.5.0 (Q3 2026)
+### v0.6.0 (Q3 2026)
 - [ ] JOIN operations across collections
 - [ ] Full-text search with stemming
+- [ ] JSONPath full support & advanced query optimizer improvements
 - [ ] Watch API for change streams
-- [ ] GraphQL-like query DSL
 
 ### v1.0.0 (Q4 2026)
 - [ ] Production-ready stable API
-- [ ] >95% test coverage
+- [ ] >98% test coverage
 - [ ] Comprehensive documentation
-- [ ] Performance parity with MongoDB for common queries
+- [ ] Performance parity with MongoDB for complex aggregate queries
+- [ ] Multi-stage aggregation pipelines
+- [ ] GraphQL-like query DSL
 
 ---
 

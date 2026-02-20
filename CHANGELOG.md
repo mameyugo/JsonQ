@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-20
+
+### Added
+- **Object Hydration System**: Introduced the `jsonq-hydrator` components directly in the repository via PHP.
+  - `#[\JsonQ\Attribute\Type]` attribute to support mapping strongly-typed arrays inside objects.
+  - Customisable type coercion `TypeCoercionMode` (`STRICT` or `LENIENT`).
+  - Configurable `HydratorOptions` for mapping JSON keys to PHP properties and ignoring unknown properties.
+- **HydratableStore Wrapper**: Added `JsonQ\Store\HydratableStore` which extends the native `Store` and implements typed hydration logic directly:
+  - `findInAs()`, `findOneAs()`, `streamAs()`
+  - `setObject()`, `pushObject()`
+- **Composer configuration**: Moved JsonQ files into `php/` with the `JsonQ\\` PSR-4 namespace. Tests are implemented with PHPUnit.
+
+### Changed
+- Fixed syntax issue with `namespace` inside `stubs/JsonQ.php` guard check for compatibility with certain PHP parsers.
+
 ## [0.4.1] - 2026-02-19
 
 ### Fixed

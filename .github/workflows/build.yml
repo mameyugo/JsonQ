@@ -111,9 +111,27 @@ jobs:
 
           echo "✅ Artifact: $ARTIFACT_NAME ($(ls -lh dist/$ARTIFACT_NAME | awk '{print $5}'))"
 
-      - name: Run Tests
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Run PHPUnit (Hydrator — pure PHP)
+        run: vendor/bin/phpunit --testsuite Hydrator --testdox
+
+      - name: Run PHPUnit (HydratableStore — native extension)
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" vendor/bin/phpunit --testsuite HydratableStore --testdox
+
+      - name: Run Legacy Integration Tests
         run: |
           php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/run_tests.php
+
+      - name: Run Streaming Integration Tests
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_streaming.php
+
+      - name: Run Hydrator Integration Tests
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_hydrator.php
 
       - name: Build .deb package (Linux only)
         if: runner.os == 'Linux'

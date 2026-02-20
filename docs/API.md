@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.4.1)
+# JsonQ API Reference (v0.5.0)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
@@ -95,10 +95,20 @@ $admins = $store->stream('/users',
 );
 ```
 
+### `streamAs(string $class, string $pointer, ?array $conditions = null, ?array $options = null): array`
+
+*(HydratableStore only)* Similar to `stream()`, but returns an array of hydrated PHP objects.
+
+```php
+$admins = $hydratableStore->streamAs(User::class, '/users');
+```
+
 **Options:**
 - `limit` (int): Max items to return.
 - `skip` (int): Items to skip.
 - `select` (string[]): Fields to include.
+
+**Note (v0.4.1):** If the JSON Pointer targets an object instead of an array, `stream()` gracefully returns an empty stream instead of throwing a format error.
 
 ### `streamCount(string $pointer, ?array $conditions = null): int`
 
@@ -123,6 +133,16 @@ Performs aggregation on a stream.
 
 ```php
 $total = $store->streamAggregate('/orders', 'sum', 'amount');
+```
+
+### `\JsonQ\StreamFilter::apply(mixed $item): mixed`
+
+If you are using the native stream filter wrapper directly, you can apply the condition/projection logic to a single decoded item.
+
+```php
+$filter = new \JsonQ\StreamFilter(['age' => ['$gt' => 18]], ['name', 'age']);
+$result = $filter->apply(['name' => 'Alice', 'age' => 20, 'role' => 'admin']);
+// Returns: ['name' => 'Alice', 'age' => 20]
 ```
 
 ---
@@ -157,6 +177,22 @@ Appends a value to an array. Returns `false` if the target is not an array.
 ```php
 $store->push('users', ['name' => 'New User', 'age' => 25]);
 $store->push('tags', 'new-tag');
+```
+
+### `setObject(string $path, object $obj, array $ignore = []): bool`
+
+*(HydratableStore only)* Serializes a PHP object and sets it at the given dot-notation path.
+
+```php
+$hydratableStore->setObject('profile', new User(1, 'Alice'));
+```
+
+### `pushObject(string $path, object $obj, array $ignore = []): bool`
+
+*(HydratableStore only)* Serializes a PHP object and pushes it to an array.
+
+```php
+$hydratableStore->pushObject('users', new User(1, 'Alice'));
 ```
 
 ### `merge(string $path, mixed $value): bool`
@@ -250,6 +286,22 @@ Returns the first matching record, or `null` if none match.
 
 ```php
 $user = $store->findOne('users', ['email' => 'alice@example.com']);
+```
+
+### `findOneAs(string $class, string $collection, array $conditions): ?object`
+
+*(HydratableStore only)* Works like `findOne` but returns a strongly-typed hydrated PHP object.
+
+```php
+$user = $hydratableStore->findOneAs(User::class, 'users', ['email' => 'alice@example.com']);
+```
+
+### `findInAs(string $class, string $collection, array $conditions): array`
+
+*(HydratableStore only)* Works like `find` but returns an array of hydrated PHP objects.
+
+```php
+$admins = $hydratableStore->findInAs(User::class, 'users', ['role' => 'admin']);
 ```
 
 ### `executeQuery(string $collection, array $querySpec): array`

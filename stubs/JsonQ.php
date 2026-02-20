@@ -10,7 +10,7 @@
  * In production, the native Rust extension provides the real implementations.
  *
  * @package  JsonQ
- * @version  0.4.1
+ * @version  0.5.0
  * @license  The PHP License, version 3.01
  * @link     https://github.com/mameyugo/JsonQ
  */
@@ -18,16 +18,17 @@
 // Guard: only define stubs if the real extension is not loaded.
 // In production (with ext-jsonq), PHP uses the native Rust classes.
 // In development/CI without the extension, IDEs use these stubs.
-if (!extension_loaded('jsonq')) {
+namespace {
+    if (!extension_loaded('jsonq')) {
 
-    // ──────────────────────────────────────────────────────────────
-    // Global Functions
-    // ──────────────────────────────────────────────────────────────
+        // ──────────────────────────────────────────────────────────────
+        // Global Functions
+        // ──────────────────────────────────────────────────────────────
 
     /**
      * Get the JsonQ extension version.
      *
-     * @return string Semantic version string (e.g., "0.4.1")
+     * @return string Semantic version string (e.g., "0.5.0")
      */
     function jsonq_version(): string
     {
@@ -184,7 +185,34 @@ if (!extension_loaded('jsonq')) {
     // JsonQ\Store Class
     // ──────────────────────────────────────────────────────────────
 
-    namespace JsonQ {
+    } // end if 
+} // end global namespace
+
+namespace JsonQ {
+
+    if (!extension_loaded('jsonq')) {
+
+        /**
+         * Stream Filter for memory-efficient MongoDB-style query filtering.
+         * Useful for filtering JSON datasets directly while streaming.
+         */
+        class StreamFilter
+        {
+            /**
+             * @param array $conditions MongoDB-style query filters
+             * @param array $projection Fields to extract/keep
+             */
+            public function __construct(array $conditions, array $projection = []) {}
+
+            /**
+             * Applies the configured conditions and projection to an item.
+             * Returns the modified item, or null if it fails the condition.
+             *
+             * @param mixed $item The decoded JSON item to filter
+             * @return mixed|null
+             */
+            public function apply(mixed $item): mixed {}
+        }
 
         /**
          * High-performance JSON file storage engine backed by Rust.
@@ -685,8 +713,8 @@ if (!extension_loaded('jsonq')) {
              * @throws \Exception On I/O error
              */
             public function restore(string $path): bool {}
-        }
+        } // end class Store
 
-    } // namespace JsonQ
+    } // end if (!extension_loaded('jsonq'))
 
-} // if (!extension_loaded('jsonq'))
+} // end namespace JsonQ
