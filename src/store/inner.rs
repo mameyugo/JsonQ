@@ -33,6 +33,9 @@ pub struct StoreInner {
     /// Transaction state
     pub(crate) transaction: TransactionState,
 
+    /// Active file lock during transaction
+    pub(crate) tx_lock: RwLock<Option<LockGuard>>,
+
     /// Operational metrics (shared globally)
     /// Operational metrics (shared globally)
     pub(crate) metrics: &'static Metrics,
@@ -77,6 +80,7 @@ impl StoreInner {
             indexes: RwLock::new(HashMap::new()),
             opts: RwLock::new(StoreOpts::default()),
             transaction: TransactionState::new(),
+            tx_lock: RwLock::new(None),
             metrics: Metrics::global(),
             interner: RwLock::new(KeyInterner::new()),
         };
@@ -108,7 +112,22 @@ impl StoreInner {
             .map(|t| {
                 t.duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
+                    .as_nanos() as u64
+            })
+            .unwrap_or(0)
+    }
+
+    /// Get file inode (0 if not on Unix)
+    pub fn inode(&self) -> u64 {
+        fs::metadata(&self.path)
+            .map(|m| {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::MetadataExt;
+                    m.ino()
+                }
+                #[cfg(not(unix))]
+                0
             })
             .unwrap_or(0)
     }
@@ -147,6 +166,7 @@ impl StoreInner {
         crate::security::validate_file_size(&self.path)?;
 
         let mt = self.mtime();
+        let ino = self.inode();
 
         // Check cache validity
         {
@@ -155,7 +175,7 @@ impl StoreInner {
                 .read()
                 .map_err(|e| format!("Cache lock poisoned: {}", e))?;
             if let Some(ref cached) = *cache {
-                if cached.is_valid(mt) {
+                if cached.is_valid(mt, ino) {
                     self.metrics.record_cache_hit();
                     self.metrics.record_latency(start.elapsed());
                     return Ok(cached.data.clone());
@@ -241,7 +261,7 @@ impl StoreInner {
                 .cache
                 .write()
                 .map_err(|e| format!("Cache lock poisoned: {}", e))?;
-            *cache = Some(CachedData::new(arc_data.clone(), mt));
+            *cache = Some(CachedData::new(arc_data.clone(), mt, ino));
         }
 
         self.metrics.record_latency(start.elapsed());
@@ -342,7 +362,7 @@ impl StoreInner {
             .cache
             .write()
             .map_err(|e| format!("Cache lock poisoned: {}", e))?;
-        *cache = Some(CachedData::new(data, self.mtime()));
+        *cache = Some(CachedData::new(data, self.mtime(), self.inode()));
 
         // Invalidate all indexes as file content (and mtime) has changed
         let mut indexes = self
@@ -373,7 +393,12 @@ impl StoreInner {
         F: FnOnce(&mut Value),
     {
         // Acquire exclusive (write) lock for the entire read-modify-write operation
-        let _lock = LockGuard::write(&self.path)?;
+        // only if we do not already hold it in an active transaction.
+        let _lock = if self.transaction.is_active() {
+            None
+        } else {
+            Some(LockGuard::write(&self.path)?)
+        };
 
         // Read current data (directly, bypasses the lock acquisition in read())
         let arc_data = if self.transaction.is_active() {
@@ -424,8 +449,8 @@ impl StoreInner {
             return Err("Transaction already active".to_string());
         }
 
-        // Acquire write lock to ensure we have exclusive access during TX initialization
-        let _lock = LockGuard::write(&self.path)?;
+        // Acquire write lock to ensure we have exclusive access during TX
+        let lock = LockGuard::write(&self.path)?;
 
         let tx_file = self.path.with_extension("tx");
 
@@ -446,18 +471,36 @@ impl StoreInner {
         )
         .map_err(|e| e.to_string())?;
 
+        // Store the lock in the active transaction lock
+        if let Ok(mut tx_lock) = self.tx_lock.write() {
+            *tx_lock = Some(lock);
+        } else if let Err(e) = self.tx_lock.write() {
+            *e.into_inner() = Some(lock);
+        }
+
         self.transaction.begin(current_data)
     }
 
     /// Commit current transaction
     pub fn commit(&self) -> Result<(), String> {
-        let data = self.transaction.commit()?;
+        if !self.transaction.is_active() {
+            return Err("No active transaction".to_string());
+        }
 
-        // Acquire write lock for the commit process
-        let _lock = LockGuard::write(&self.path)?;
+        let data = self.transaction.get_data().ok_or("No transaction data")?;
 
-        // Flush data to disk without re-acquiring lock
+        // Flush data to disk without re-acquiring lock (we already hold it)
         self.flush_without_lock(data)?;
+
+        // Consumes transaction state
+        let _ = self.transaction.commit()?;
+
+        // Release transaction lock
+        if let Ok(mut tx_lock) = self.tx_lock.write() {
+            *tx_lock = None;
+        } else if let Err(e) = self.tx_lock.write() {
+            *e.into_inner() = None;
+        }
 
         // Remove transaction file
         let tx_file = self.path.with_extension("tx");
@@ -468,6 +511,14 @@ impl StoreInner {
     /// Rollback current transaction
     pub fn rollback(&self) -> Result<(), String> {
         self.transaction.rollback()?;
+
+        // Release transaction lock
+        if let Ok(mut tx_lock) = self.tx_lock.write() {
+            *tx_lock = None;
+        } else if let Err(e) = self.tx_lock.write() {
+            *e.into_inner() = None;
+        }
+
         let tx_file = self.path.with_extension("tx");
         if tx_file.exists() {
             let _ = fs::remove_file(&tx_file);
@@ -484,7 +535,11 @@ impl StoreInner {
     pub fn recover_transaction(&self) -> Result<(), String> {
         let tx_file = self.path.with_extension("tx");
         if tx_file.exists() {
-            let _ = fs::remove_file(&tx_file);
+            // Try to acquire an exclusive lock to see if another process is active.
+            // If it succeeds, the transaction file is orphaned (crashed process) and can be removed.
+            if LockGuard::try_write(&self.path).is_ok() {
+                let _ = fs::remove_file(&tx_file);
+            }
         }
         Ok(())
     }

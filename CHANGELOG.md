@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-05-26
+
+### Added
+- **Multi-Process Concurrency Control**: Implemented robust file-level locking using `.lock` files to prevent race conditions during transactions and mutations across multiple processes.
+- **Transactional Process Exclusion**: Ensures that transaction files (`.tx`) are protected by exclusive locks and recovered gracefully (cleaned up) when orphaned (e.g. process crash), while preventing concurrent active processes from corrupting each other.
+- **Robust Cache Invalidation**: Augmented cache checks to track both file modification times (`mtime` with nanosecond precision) and system file inodes (`ino`) to accurately detect atomic renames (`fs::rename`) and prevent stale cache reads on high-speed concurrent updates.
+- **PHP Integration Tests**: Added a multi-process PHP script utilizing `pcntl_fork` to verify transaction blocking, transaction isolation, and cache invalidation under actual concurrent environments.
+
 ## [0.5.0] - 2026-02-20
 
 ### Added

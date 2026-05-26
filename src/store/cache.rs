@@ -11,19 +11,22 @@ pub struct CachedData {
     /// Shared reference to the cached JSON data
     pub data: Arc<Value>,
 
-    /// Modification time (seconds since UNIX epoch)
+    /// Modification time (nanoseconds since UNIX epoch)
     /// Used to detect file changes and invalidate cache
     pub mtime: u64,
+
+    /// File inode (on Unix systems) to detect atomic renames
+    pub inode: u64,
 }
 
 impl CachedData {
     /// Create a new cache entry
-    pub fn new(data: Arc<Value>, mtime: u64) -> Self {
-        Self { data, mtime }
+    pub fn new(data: Arc<Value>, mtime: u64, inode: u64) -> Self {
+        Self { data, mtime, inode }
     }
 
-    /// Check if cache is still valid for given file mtime
-    pub fn is_valid(&self, file_mtime: u64) -> bool {
-        self.mtime == file_mtime
+    /// Check if cache is still valid for given file mtime and inode
+    pub fn is_valid(&self, file_mtime: u64, file_inode: u64) -> bool {
+        self.mtime == file_mtime && self.inode == file_inode
     }
 }

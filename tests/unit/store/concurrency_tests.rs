@@ -201,3 +201,126 @@ fn test_reader_writer_exclusion() {
 
     writer.join().unwrap();
 }
+
+#[test]
+fn test_transaction_blocks_concurrent_writes() {
+    let temp_dir = TempDir::new().unwrap();
+    let path = temp_dir.path().join("concurrent_tx_write.json");
+    let path_str = path.to_str().unwrap().to_string();
+
+    let store1 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+    let store2 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+
+    store1.write(Arc::new(json!({"value": 0}))).unwrap();
+
+    // Start a transaction in store1 (acquires lock)
+    store1.begin_transaction().unwrap();
+    store1.mutate(|data| {
+        data["value"] = json!(1);
+    }).unwrap();
+
+    let store2_clone = Arc::clone(&store2);
+    let writer = thread::spawn(move || {
+        let start = std::time::Instant::now();
+        // This mutation in store2 should block until store1 commits
+        store2_clone.mutate(|data| {
+            data["value"] = json!(2);
+        }).unwrap();
+        start.elapsed()
+    });
+
+    // Give writer thread a moment to start and try to acquire the lock
+    thread::sleep(Duration::from_millis(50));
+
+    // Commit the transaction in store1
+    store1.commit().unwrap();
+
+    let elapsed = writer.join().unwrap();
+
+    // Writer should have been blocked for at least ~30ms
+    assert!(
+        elapsed >= Duration::from_millis(30),
+        "Writer should block during active transaction, took {:?}", elapsed
+    );
+
+    let file = std::fs::File::open(&path).unwrap();
+    let final_data: serde_json::Value = serde_json::from_reader(file).unwrap();
+    assert_eq!(final_data["value"], 2, "Final value should be written by store2");
+}
+
+#[test]
+fn test_transaction_blocks_other_transactions() {
+    let temp_dir = TempDir::new().unwrap();
+    let path = temp_dir.path().join("concurrent_tx_tx.json");
+    let path_str = path.to_str().unwrap().to_string();
+
+    let store1 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+    let store2 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+
+    store1.write(Arc::new(json!({"value": 0}))).unwrap();
+
+    // Start transaction in store1
+    store1.begin_transaction().unwrap();
+
+    let store2_clone = Arc::clone(&store2);
+    let writer = thread::spawn(move || {
+        let start = std::time::Instant::now();
+        // This transaction in store2 should block until store1 commits
+        store2_clone.begin_transaction().unwrap();
+        store2_clone.mutate(|data| {
+            data["value"] = json!(2);
+        }).unwrap();
+        store2_clone.commit().unwrap();
+        start.elapsed()
+    });
+
+    thread::sleep(Duration::from_millis(50));
+
+    // Commit transaction in store1
+    store1.commit().unwrap();
+
+    let elapsed = writer.join().unwrap();
+
+    assert!(
+        elapsed >= Duration::from_millis(30),
+        "Second transaction should block during active transaction, took {:?}", elapsed
+    );
+
+    let file = std::fs::File::open(&path).unwrap();
+    let final_data: serde_json::Value = serde_json::from_reader(file).unwrap();
+    assert_eq!(final_data["value"], 2);
+}
+
+#[test]
+fn test_safe_transaction_recovery() {
+    let temp_dir = TempDir::new().unwrap();
+    let path = temp_dir.path().join("safe_recovery.json");
+    let path_str = path.to_str().unwrap().to_string();
+
+    let store1 = Arc::new(StoreInner::new(path_str.clone()).unwrap());
+    store1.write(Arc::new(json!({"status": "ok"}))).unwrap();
+
+    // 1. Start transaction in store1 (creates safe_recovery.tx and locks path)
+    store1.begin_transaction().unwrap();
+
+    let tx_file = path.with_extension("tx");
+    assert!(tx_file.exists(), "Transaction snapshot file should exist");
+
+    // 2. Initialize a separate store2 instance (simulating another process startup)
+    let _store2 = StoreInner::new(path_str.clone()).unwrap();
+
+    // Verification: The transaction snapshot file must NOT have been deleted because store1 is active
+    assert!(tx_file.exists(), "Active transaction snapshot file must NOT be deleted during recovery by another process");
+
+    // 3. Rollback store1 transaction to release lock
+    store1.rollback().unwrap();
+    assert!(!tx_file.exists(), "Snapshot file should be deleted on rollback");
+
+    // 4. Manually create an orphaned .tx file to simulate a crashed process
+    std::fs::write(&tx_file, "{}").unwrap();
+    assert!(tx_file.exists());
+
+    // 5. Initialize store3. Since no lock is held, it should recover (delete) the orphaned .tx file.
+    let _store3 = StoreInner::new(path_str.clone()).unwrap();
+    assert!(!tx_file.exists(), "Orphaned transaction snapshot file should be deleted during recovery");
+}
