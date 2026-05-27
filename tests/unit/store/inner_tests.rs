@@ -114,6 +114,7 @@ fn test_options_pretty_print() {
         pretty: true,
         fsync: false,
         compression: CompressionMethod::None,
+        revision_log: true,
     });
 
     store.write(Arc::new(json!({"key": "value"}))).unwrap();
@@ -130,6 +131,7 @@ fn test_options_compact() {
         pretty: false,
         fsync: false,
         compression: CompressionMethod::None,
+        revision_log: true,
     });
 
     store.write(Arc::new(json!({"key": "value"}))).unwrap();

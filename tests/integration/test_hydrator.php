@@ -1,6 +1,6 @@
 <?php
 /**
- * JsonQ v0.7.0 — Hydrator Integration Tests
+ * JsonQ v0.8.0 — Hydrator Integration Tests
  * Usage: php -d "extension=/path/to/libjsonq.so" tests/integration/test_hydrator.php
  */
 

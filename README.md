@@ -13,7 +13,7 @@
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Benchmarks](#-performance) • [Contributing](#-contributing)
 
-Version: **0.7.0**
+Version: **0.8.0**
 
 </div>
 

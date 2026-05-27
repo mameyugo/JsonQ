@@ -21,6 +21,9 @@ pub struct StoreOpts {
 
     /// Compression method
     pub compression: CompressionMethod,
+
+    /// Enable revision logging for PITR
+    pub revision_log: bool,
 }
 
 impl Default for StoreOpts {
@@ -29,6 +32,7 @@ impl Default for StoreOpts {
             pretty: false, // Compact JSON by default (faster)
             fsync: false,  // Skip fsync by default (faster)
             compression: CompressionMethod::None,
+            revision_log: true,
         }
     }
 }
@@ -40,6 +44,7 @@ impl StoreOpts {
             pretty: false,
             fsync: false,
             compression: CompressionMethod::None,
+            revision_log: true,
         }
     }
 
@@ -49,6 +54,7 @@ impl StoreOpts {
             pretty: true,
             fsync: true,
             compression: CompressionMethod::None,
+            revision_log: true,
         }
     }
 
@@ -58,6 +64,7 @@ impl StoreOpts {
             pretty: false,
             fsync: true,
             compression: CompressionMethod::None,
+            revision_log: true,
         }
     }
 }

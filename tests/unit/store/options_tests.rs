@@ -38,9 +38,11 @@ fn test_custom_options() {
         pretty: true,
         fsync: false,
         compression: CompressionMethod::None,
+        revision_log: true,
     };
     assert_eq!(opts.pretty, true);
     assert_eq!(opts.fsync, false);
+    assert_eq!(opts.revision_log, true);
 }
 
 #[test]

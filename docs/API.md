@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.7.0)
+# JsonQ API Reference (v0.8.0)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
@@ -601,5 +601,5 @@ $store->restore('/backups/snap.json');
 Returns the extension version string.
 
 ```php
-echo jsonq_version(); // "0.7.0"
+echo jsonq_version(); // "0.8.0"
 ```

@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.7.0
+ * @version 0.8.0
  * @license The PHP License, version 3.01
  */
 
@@ -586,4 +586,38 @@ class Store
      * @return bool True if merged successfully.
      */
     public function mergeBranch(string $name): bool {}
+
+    /**
+     * Retrieves the revision history log of the database.
+     *
+     * If a path is provided, returns only revisions that modified the specified path
+     * (or nested children, or parent paths).
+     *
+     * Each revision contains 'id', 'timestamp', 'op', 'path', 'old', 'new', and 'existed'.
+     *
+     * @param string|null $path Optional dot-notation path to filter by.
+     * @return array Array of revision records.
+     */
+    public function history(?string $path = null): array {}
+
+    /**
+     * Rolls back the entire database state to the end of the specified revision ID.
+     *
+     * Truncates the journal history up to the target revision ID.
+     * Use 0 to rollback to the initial empty state.
+     *
+     * @param int $revisionId Target revision ID.
+     * @return bool True if rolled back successfully.
+     */
+    public function rollbackTo(int $revisionId): bool {}
+
+    /**
+     * Rolls back the database state to the last revision committed at or before the timestamp.
+     *
+     * Truncates the journal history to that revision ID.
+     *
+     * @param int $timestamp Unix timestamp.
+     * @return bool True if rolled back successfully.
+     */
+    public function rollbackToTimestamp(int $timestamp): bool {}
 }

@@ -158,6 +158,9 @@ impl JsonStore {
             "compression" => {
                 z.set_string(&format!("{:?}", opts.compression), false)?;
             }
+            "revision_log" | "revision" => {
+                z.set_bool(opts.revision_log);
+            }
             _ => return Err(format!("Unknown option: {}", key).into()),
         }
         Ok(z)
@@ -181,6 +184,9 @@ impl JsonStore {
                     "zstd" => CompressionMethod::Zstd,
                     _ => CompressionMethod::None,
                 };
+            }
+            "revision_log" | "revision" => {
+                opts.revision_log = value.bool().unwrap_or(true);
             }
             _ => return Err(format!("Unknown option: {}", key).into()),
         }
@@ -228,13 +234,22 @@ impl JsonStore {
             .map_err(|e: String| PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
+        let mut logged_changes = Vec::new();
+
         for (path, value) in po {
             validate_path_depth(path).map_err(|e| PhpException::from(e))?;
+            let old = read_path(&data, path).cloned().unwrap_or(Value::Null);
+            let existed = read_path(&data, path).is_some();
             write_path(&mut data, path, value.clone());
+            logged_changes.push((path.clone(), old, value.clone(), existed));
             count += 1;
         }
         i.write(Arc::new(data))
             .map_err(|e: String| PhpException::from(e.to_string()))?;
+
+        for (path, old, value, existed) in logged_changes {
+            self.log_revision("set", &path, old, value, existed);
+        }
         Ok(count)
     }
 
@@ -246,14 +261,23 @@ impl JsonStore {
             .map_err(|e: String| PhpException::from(e.to_string()))?;
         let mut data = (*cd).clone();
         let mut count = 0i64;
+        let mut logged_changes = Vec::new();
+
         for path in &paths {
             validate_path_depth(path).map_err(|e| PhpException::from(e))?;
+            let old = read_path(&data, path).cloned().unwrap_or(Value::Null);
+            let existed = read_path(&data, path).is_some();
             if remove_path(&mut data, path) {
+                logged_changes.push((path.clone(), old, existed));
                 count += 1;
             }
         }
         i.write(Arc::new(data))
             .map_err(|e: String| PhpException::from(e.to_string()))?;
+
+        for (path, old, existed) in logged_changes {
+            self.log_revision("remove", &path, old, Value::Null, existed);
+        }
         Ok(count)
     }
 
@@ -273,10 +297,16 @@ impl JsonStore {
     #[php(name = "fromJson")]
     pub fn from_json(&self, json_str: String) -> PhpResult<bool> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let old = {
+            let cd = i.read().map_err(|e: String| PhpException::from(e.to_string()))?;
+            (*cd).clone()
+        };
         let data: Value =
             serde_json::from_str(&json_str).map_err(|e| PhpException::from(e.to_string()))?;
-        i.write(Arc::new(data))
+        i.write(Arc::new(data.clone()))
             .map_err(|e: String| PhpException::from(e.to_string()))?;
+
+        self.log_revision("import", "", old, data, true);
         Ok(true)
     }
 
@@ -289,8 +319,14 @@ impl JsonStore {
 
     pub fn clear(&self) -> PhpResult<bool> {
         let i: &StoreInner = self.inner.as_ref().ok_or("Not init")?;
+        let old = {
+            let cd = i.read().map_err(|e: String| PhpException::from(e.to_string()))?;
+            (*cd).clone()
+        };
         i.write(Arc::new(Value::Object(Map::new())))
             .map_err(|e: String| PhpException::from(e.to_string()))?;
+
+        self.log_revision("clear", "", old, Value::Object(Map::new()), true);
         Ok(true)
     }
 
@@ -380,8 +416,15 @@ impl JsonStore {
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
         let v = zval_to_value(value);
-        i.mutate(|d: &mut Value| write_path(d, &path, v))
+        let (old, existed) = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            (read_path(&cd, &path).cloned().unwrap_or(Value::Null), read_path(&cd, &path).is_some())
+        };
+
+        i.mutate(|d: &mut Value| write_path(d, &path, v.clone()))
             .map_err(|e| PhpException::from(e))?;
+
+        self.log_revision("set", &path, old, v, existed);
         Ok(true)
     }
 
@@ -391,10 +434,20 @@ impl JsonStore {
             .inner
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
-        i.mutate(|d: &mut Value| {
-            remove_path(d, &path);
-        })
-        .map_err(|e| PhpException::from(e))?;
+
+        let (old, existed) = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            (read_path(&cd, &path).cloned().unwrap_or(Value::Null), read_path(&cd, &path).is_some())
+        };
+
+        if existed {
+            i.mutate(|d: &mut Value| {
+                remove_path(d, &path);
+            })
+            .map_err(|e| PhpException::from(e))?;
+
+            self.log_revision("remove", &path, old, Value::Null, existed);
+        }
         Ok(true)
     }
 
@@ -405,13 +458,24 @@ impl JsonStore {
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
         let v = zval_to_value(value);
-        i.mutate(|d: &mut Value| match read_path_mut(d, &path) {
-            Some(Value::Array(a)) => {
-                a.push(v);
-            }
-            _ => {}
-        })
-        .map_err(|e| PhpException::from(e))?;
+
+        let (old, existed) = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            (read_path(&cd, &path).cloned().unwrap_or(Value::Null), read_path(&cd, &path).is_some())
+        };
+
+        let mut new_arr = old.clone();
+        if let Some(arr) = new_arr.as_array_mut() {
+            arr.push(v);
+            i.mutate(|d: &mut Value| {
+                if let Some(Value::Array(a)) = read_path_mut(d, &path) {
+                    a.push(zval_to_value(value));
+                }
+            })
+            .map_err(|e| PhpException::from(e))?;
+
+            self.log_revision("push", &path, old, new_arr, existed);
+        }
         Ok(true)
     }
 
@@ -423,14 +487,27 @@ impl JsonStore {
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
         let nv = zval_to_value(value);
+
+        let (old, existed) = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            (read_path(&cd, &path).cloned().unwrap_or(Value::Null), read_path(&cd, &path).is_some())
+        };
+
         i.mutate(|d: &mut Value| {
             if let Some(e) = read_path_mut(d, &path) {
                 merge_values(e, &nv);
             } else {
-                write_path(d, &path, nv);
+                write_path(d, &path, nv.clone());
             }
         })
         .map_err(|e| PhpException::from(e))?;
+
+        let new_val = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            read_path(&cd, &path).cloned().unwrap_or(Value::Null)
+        };
+
+        self.log_revision("merge", &path, old, new_val, existed);
         Ok(true)
     }
 
@@ -441,6 +518,12 @@ impl JsonStore {
             .inner
             .as_ref()
             .ok_or_else(|| PhpException::from("Not init"))?;
+
+        let (old, existed) = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            (read_path(&cd, &path).cloned().unwrap_or(Value::Null), read_path(&cd, &path).is_some())
+        };
+
         i.mutate(|d: &mut Value| {
             if let Some(v) = read_path_mut(d, &path) {
                 if let Some(n) = v.as_f64() {
@@ -449,6 +532,13 @@ impl JsonStore {
             }
         })
         .map_err(|e| PhpException::from(e))?;
+
+        let new_val = {
+            let cd = i.read().map_err(|e| PhpException::from(e))?;
+            read_path(&cd, &path).cloned().unwrap_or(Value::Null)
+        };
+
+        self.log_revision("increment", &path, old, new_val, existed);
         Ok(true)
     }
 
@@ -1357,9 +1447,229 @@ impl JsonStore {
             _ => Ok(Vec::new()),
         }
     }
+
+    #[php(name = "history")]
+    pub fn history(&self, path: Option<String>) -> PhpResult<Zval> {
+        let journal_path = self.get_journal_path();
+        if !journal_path.exists() {
+            return Ok(value_to_zval(&Value::Array(vec![])));
+        }
+
+        let content = fs::read_to_string(&journal_path).map_err(|e| PhpException::from(e.to_string()))?;
+        let mut history_entries = Vec::new();
+        
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(entry) = serde_json::from_str::<Value>(line) {
+                let mut matches = true;
+                if let Some(ref filter_path) = path {
+                    if let Some(entry_path) = entry.get("path").and_then(|p| p.as_str()) {
+                        if entry_path != filter_path 
+                           && !entry_path.starts_with(&format!("{}.", filter_path)) 
+                           && !filter_path.starts_with(&format!("{}.", entry_path)) 
+                           && entry_path != "" 
+                        {
+                            matches = false;
+                        }
+                    }
+                }
+                if matches {
+                    history_entries.push(entry);
+                }
+            }
+        }
+
+        Ok(value_to_zval(&Value::Array(history_entries)))
+    }
+
+    #[php(name = "rollbackTo")]
+    pub fn rollback_to(&self, revision_id: u64) -> PhpResult<bool> {
+        let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
+        let journal_path = self.get_journal_path();
+        if !journal_path.exists() {
+            return Err(format!("No revision history found to rollback to ID {}", revision_id).into());
+        }
+
+        let content = fs::read_to_string(&journal_path).map_err(|e| PhpException::from(e.to_string()))?;
+        let mut entries = Vec::new();
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(entry) = serde_json::from_str::<Value>(line) {
+                entries.push(entry);
+            }
+        }
+
+        let mut max_id = 0u64;
+        let mut found_id = revision_id == 0;
+        for entry in &entries {
+            if let Some(id) = entry.get("id").and_then(|id| id.as_u64()) {
+                if id == revision_id {
+                    found_id = true;
+                }
+                if id > max_id {
+                    max_id = id;
+                }
+            }
+        }
+
+        if !found_id {
+            return Err(format!("Revision ID {} not found in history (max ID is {})", revision_id, max_id).into());
+        }
+
+        if revision_id >= max_id && revision_id != 0 {
+            return Ok(true);
+        }
+
+        let cd = i.read().map_err(|e| PhpException::from(e))?;
+        let mut current_data = (*cd).clone();
+
+        let mut rollback_entries = entries.clone();
+        rollback_entries.sort_by(|a, b| {
+            let id_a = a.get("id").and_then(|id| id.as_u64()).unwrap_or(0);
+            let id_b = b.get("id").and_then(|id| id.as_u64()).unwrap_or(0);
+            id_b.cmp(&id_a)
+        });
+
+        for entry in rollback_entries {
+            let id = entry.get("id").and_then(|id| id.as_u64()).unwrap_or(0);
+            if id <= revision_id {
+                continue;
+            }
+
+            let op = entry.get("op").and_then(|o| o.as_str()).unwrap_or("");
+            let path = entry.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            let old_val = entry.get("old").cloned().unwrap_or(Value::Null);
+            let existed = entry.get("existed").and_then(|e| e.as_bool()).unwrap_or(false);
+
+            if op == "clear" || op == "import" || op == "merge_branch" || path == "" {
+                current_data = old_val;
+            } else {
+                if existed {
+                    write_path(&mut current_data, path, old_val);
+                } else {
+                    remove_path(&mut current_data, path);
+                }
+            }
+        }
+
+        i.write(Arc::new(current_data))
+            .map_err(|e: String| PhpException::from(e.to_string()))?;
+
+        let mut new_journal_lines = Vec::new();
+        for entry in &entries {
+            let id = entry.get("id").and_then(|id| id.as_u64()).unwrap_or(0);
+            if id <= revision_id {
+                if let Ok(line) = serde_json::to_string(entry) {
+                    new_journal_lines.push(line);
+                }
+            }
+        }
+
+        let mut file = fs::File::create(&journal_path).map_err(|e| PhpException::from(e.to_string()))?;
+        for line in new_journal_lines {
+            writeln!(file, "{}", line).map_err(|e| PhpException::from(e.to_string()))?;
+        }
+
+        Ok(true)
+    }
+
+    #[php(name = "rollbackToTimestamp")]
+    pub fn rollback_to_timestamp(&self, timestamp: u64) -> PhpResult<bool> {
+        let journal_path = self.get_journal_path();
+        if !journal_path.exists() {
+            return Err("No revision history found to rollback".to_string().into());
+        }
+
+        let content = fs::read_to_string(&journal_path).map_err(|e| PhpException::from(e.to_string()))?;
+        let mut target_id = 0u64;
+
+        for line in content.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(entry) = serde_json::from_str::<Value>(line) {
+                let entry_ts = entry.get("timestamp").and_then(|t| t.as_u64()).unwrap_or(0);
+                let entry_id = entry.get("id").and_then(|id| id.as_u64()).unwrap_or(0);
+                if entry_ts <= timestamp {
+                    if entry_id > target_id {
+                        target_id = entry_id;
+                    }
+                }
+            }
+        }
+
+        self.rollback_to(target_id)
+    }
 }
 
 impl JsonStore {
+    fn log_revision(&self, op: &str, path: &str, old: Value, new: Value, existed: bool) {
+        let i = match &self.inner {
+            Some(i) => i,
+            None => return,
+        };
+        let opts = i.get_opts();
+        if !opts.revision_log {
+            return;
+        }
+
+        let journal_path = self.get_journal_path();
+        let next_id = self.get_next_revision_id(&journal_path);
+        
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let record = json!({
+            "id": next_id,
+            "timestamp": timestamp,
+            "op": op,
+            "path": path,
+            "old": old,
+            "new": new,
+            "existed": existed
+        });
+
+        if let Ok(record_str) = serde_json::to_string(&record) {
+            if let Ok(mut file) = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(&journal_path)
+            {
+                let _ = writeln!(file, "{}", record_str);
+            }
+        }
+    }
+
+    fn get_journal_path(&self) -> PathBuf {
+        let mut p = self.main_path.clone();
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("json");
+        p.set_extension(format!("{}.journal", ext));
+        p
+    }
+
+    fn get_next_revision_id(&self, journal_path: &std::path::Path) -> u64 {
+        if !journal_path.exists() {
+            return 1;
+        }
+        if let Ok(content) = fs::read_to_string(journal_path) {
+            if let Some(last_line) = content.lines().filter(|l| !l.trim().is_empty()).last() {
+                if let Ok(val) = serde_json::from_str::<Value>(last_line) {
+                    if let Some(id) = val.get("id").and_then(|id| id.as_u64()) {
+                        return id + 1;
+                    }
+                }
+            }
+        }
+        1
+    }
+
     fn get_branch_path(&self, name: &str) -> Result<PathBuf, String> {
         if name.is_empty() || name == "main" || name == "master" {
             Ok(self.main_path.clone())
@@ -1373,7 +1683,6 @@ impl JsonStore {
                 .and_then(|e| e.to_str())
                 .unwrap_or("json");
             
-            // Clean/validate name to prevent directory traversal
             if name.contains('/') || name.contains('\\') || name.contains("..") {
                 return Err("Invalid branch name (traversal or directory separators detected)".to_string());
             }
