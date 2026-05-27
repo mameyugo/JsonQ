@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.8.0
+ * @version 0.9.0
  * @license The PHP License, version 3.01
  */
 
@@ -174,6 +174,17 @@ class Store
      * @return array Matching records
      */
     public function executeQuery(string $collection, array $querySpec): array {}
+
+    /**
+     * Execute a SQL query over JSON collections.
+     *
+     * Supported clauses: SELECT, FROM, WHERE, ORDER BY, LIMIT, OFFSET
+     * Supported operators in WHERE: =, !=, <>, >, >=, <, <=, LIKE, IN
+     *
+     * @param string $sql SQL SELECT statement
+     * @return array Query results
+     */
+    public function query(string $sql): array {}
 
     // ── Aggregation ──
 

@@ -51,6 +51,7 @@ pub mod optimizer;
 pub mod path;
 pub mod regex_safe;
 pub mod vector;
+pub mod sql;
 
 pub use fluent::execute_query;
 pub use matcher::matches;

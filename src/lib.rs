@@ -626,6 +626,18 @@ impl JsonStore {
             .unwrap_or_else(|_| Zval::new())
     }
 
+    #[php(name = "query")]
+    pub fn query(&self, sql: String) -> PhpResult<Zval> {
+        let i = self
+            .inner
+            .as_ref()
+            .ok_or_else(|| PhpException::from("Store not initialized"))?;
+        match query::sql::execute_sql(i, &sql) {
+            Ok(val) => Ok(value_to_zval(&val)),
+            Err(e) => Err(PhpException::from(e)),
+        }
+    }
+
     pub fn aggregate(&self, collection: String, field: String, operation: String) -> Zval {
         let i: &StoreInner = match &self.inner {
             Some(i) => i,

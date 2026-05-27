@@ -1,6 +1,6 @@
 <?php
 /**
- * JsonQ v0.8.0 — Point-in-Time Recovery (PITR) & Revision History Integration Tests
+ * JsonQ v0.9.0 — Point-in-Time Recovery (PITR) & Revision History Integration Tests
  * Usage: php -d "extension=/path/to/libjsonq.so" tests/integration/test_pitr.php
  */
 

@@ -134,6 +134,10 @@ jobs:
         run: |
           php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_hydrator.php
 
+      - name: Run SQL Integration Tests
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_sql.php
+
       - name: Build .deb package (Linux only)
         if: runner.os == 'Linux'
         run: |

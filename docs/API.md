@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.8.0)
+# JsonQ API Reference (v0.9.0)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
@@ -334,6 +334,24 @@ $store->executeQuery('users', [
 
 **Fluent Operators:** `=`, `==`, `!=`, `<>`, `>`, `>=`, `<`, `<=`, `in`, `not in`, `contains`, `starts_with`, `ends_with`, `between`
 
+### `query(string $sql): array`
+
+Executes a SQL SELECT query over JSON collections. Supported clauses are `SELECT`, `FROM`, `WHERE`, `ORDER BY`, `LIMIT`, and `OFFSET`.
+
+```php
+$store->query("SELECT name, email, age FROM users WHERE status = 'active' AND age >= 18 ORDER BY name DESC LIMIT 10 OFFSET 20");
+```
+
+**Supported Clauses & Syntax:**
+- **SELECT**: Projection (e.g. `SELECT *` or `SELECT field1, field2`).
+- **FROM**: Target collection path in the JSON document (e.g. `FROM users`).
+- **WHERE**: Supports operators: `=`, `!=`, `<>`, `>`, `>=`, `<`, `<=`, `LIKE` (e.g. `LIKE 'val%'`, `LIKE '%val'`, `LIKE '%val%'`), and `IN` (e.g. `IN (val1, val2)`). Supports combining multiple filters with `AND` (case-insensitive).
+- **ORDER BY**: Field to sort by (e.g. `ORDER BY name ASC` or `ORDER BY name DESC`).
+- **LIMIT**: Maximum number of records to return.
+- **OFFSET**: Number of records to skip.
+
+---
+
 ---
 
 ## Aggregation
@@ -601,5 +619,5 @@ $store->restore('/backups/snap.json');
 Returns the extension version string.
 
 ```php
-echo jsonq_version(); // "0.8.0"
+echo jsonq_version(); // "0.9.0"
 ```
