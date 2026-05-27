@@ -138,6 +138,10 @@ jobs:
         run: |
           php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_sql.php
 
+      - name: Run SQL Mutation Integration Tests
+        run: |
+          php -d "extension=$(pwd)/${{ steps.artifact.outputs.src }}" tests/integration/test_sql_mutations.php
+
       - name: Build .deb package (Linux only)
         if: runner.os == 'Linux'
         run: |

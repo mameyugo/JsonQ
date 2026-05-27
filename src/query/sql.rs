@@ -1,8 +1,23 @@
-//! Basic SQL SELECT query translator and execution engine
+//! Basic SQL SELECT, INSERT, UPDATE, and DELETE query translator and execution engine
 use serde_json::{json, Map, Value};
 use crate::store::StoreInner;
-use crate::path::read_path;
+use crate::path::{read_path, write_path};
 use crate::query::execute_query;
+
+#[derive(Debug)]
+pub struct SqlQueryResult {
+    pub value: Value,
+    pub mutation: Option<SqlMutationInfo>,
+}
+
+#[derive(Debug)]
+pub struct SqlMutationInfo {
+    pub op: String,
+    pub collection: String,
+    pub old_value: Value,
+    pub new_value: Value,
+    pub existed: bool,
+}
 
 #[derive(Debug)]
 pub struct ParsedSqlQuery {
@@ -137,27 +152,6 @@ fn parse_where(where_str: &str) -> Result<Value, String> {
             let has_leading = pat.starts_with('%');
             let has_trailing = pat.ends_with('%');
             
-            let mut field_cond = Map::new();
-            if has_leading && has_trailing {
-                let inner_pat = &pat[1..pat.len() - 1];
-                field_cond.insert("contains".to_string(), Value::String(inner_pat.to_string()));
-            } else if has_leading {
-                let inner_pat = &pat[1..];
-                field_cond.insert("endsWith".to_string(), Value::String(inner_pat.to_string()));
-            } else if has_trailing {
-                let inner_pat = &pat[..pat.len() - 1];
-                field_cond.insert("startsWith".to_string(), Value::String(inner_pat.to_string()));
-            } else {
-                field_cond.insert("eq".to_string(), Value::String(pat.to_string()));
-            }
-            // For checking condition operator, fluent uses 'op' and 'value' directly.
-            // But wait, the MongoDB query uses `$startsWith` etc.
-            // Let's translate it directly to the fluent query {"field": field, "op": op, "value": value}!
-            // Wait, we will format this in `translate_to_fluent_query` below.
-            // So here, let's just store the parsed operator and value in a temporary structure, or simply return conditions as Value!
-            // To make it easy, let's store conditions as:
-            // {"field_name": {"op": "operator", "value": val}}
-            // So set conditions:
             let mut cond_obj = Map::new();
             if has_leading && has_trailing {
                 cond_obj.insert("op".to_string(), json!("contains"));
@@ -311,24 +305,244 @@ pub fn parse_sql_select(sql: &str) -> Result<ParsedSqlQuery, String> {
     })
 }
 
-pub fn execute_sql(i: &StoreInner, sql: &str) -> Result<Value, String> {
-    let parsed = parse_sql_select(sql)?;
-    let db_data = i.read().map_err(|e| e.to_string())?;
+// Quote-aware splitting functions for INSERT and UPDATE
+fn split_comma_separated_values(s: &str) -> Result<Vec<Value>, String> {
+    let mut values = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
     
-    let arr = match read_path(&db_data, &parsed.collection) {
-        Some(Value::Array(a)) => a,
-        _ => return Ok(Value::Array(vec![])),
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '\'' && !in_double_quote {
+            in_single_quote = !in_single_quote;
+            current.push(c);
+        } else if c == '"' && !in_single_quote {
+            in_double_quote = !in_double_quote;
+            current.push(c);
+        } else if c == ',' && !in_single_quote && !in_double_quote {
+            values.push(parse_sql_value(current.trim())?);
+            current.clear();
+        } else {
+            current.push(c);
+        }
+        i += 1;
+    }
+    if !current.trim().is_empty() {
+        values.push(parse_sql_value(current.trim())?);
+    }
+    Ok(values)
+}
+
+fn parse_assignment(s: &str) -> Result<(String, Value), String> {
+    let parts: Vec<&str> = s.splitn(2, '=').collect();
+    if parts.len() != 2 {
+        return Err(format!("Invalid assignment format: '{}'", s));
+    }
+    let field = parts[0].trim().to_string();
+    let val = parse_sql_value(parts[1].trim())?;
+    Ok((field, val))
+}
+
+fn split_comma_separated_assignments(s: &str) -> Result<Vec<(String, Value)>, String> {
+    let mut assignments = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+    
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        let c = chars[i];
+        if c == '\'' && !in_double_quote {
+            in_single_quote = !in_single_quote;
+            current.push(c);
+        } else if c == '"' && !in_single_quote {
+            in_double_quote = !in_double_quote;
+            current.push(c);
+        } else if c == ',' && !in_single_quote && !in_double_quote {
+            assignments.push(parse_assignment(current.trim())?);
+            current.clear();
+        } else {
+            current.push(c);
+        }
+        i += 1;
+    }
+    if !current.trim().is_empty() {
+        assignments.push(parse_assignment(current.trim())?);
+    }
+    Ok(assignments)
+}
+
+// Parsers for INSERT, UPDATE, DELETE
+fn parse_insert(sql: &str) -> Result<(String, Vec<String>, Vec<Value>), String> {
+    let sql = sql.trim().trim_end_matches(';');
+    
+    let insert_idx = find_keyword(sql, "INSERT INTO").ok_or_else(|| "Missing INSERT INTO".to_string())?;
+    let values_idx = find_keyword(sql, "VALUES").ok_or_else(|| "Missing VALUES clause".to_string())?;
+    
+    if insert_idx != 0 {
+        return Err("Query must start with INSERT INTO".to_string());
+    }
+    
+    let table_fields_part = sql[insert_idx + 11..values_idx].trim();
+    
+    let (collection, fields) = if let Some(paren_idx) = table_fields_part.find('(') {
+        let collection = table_fields_part[..paren_idx].trim().to_string();
+        let fields_str = table_fields_part[paren_idx + 1..].trim();
+        if !fields_str.ends_with(')') {
+            return Err("Malformed fields list in INSERT statement".to_string());
+        }
+        let fields_inner = &fields_str[..fields_str.len() - 1];
+        let fields: Vec<String> = fields_inner.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        (collection, fields)
+    } else {
+        (table_fields_part.to_string(), Vec::new())
     };
+    
+    if collection.is_empty() {
+        return Err("Collection name cannot be empty".to_string());
+    }
+    
+    if fields.is_empty() {
+        return Err("Columns list is required for JSON INSERT statements".to_string());
+    }
+    
+    let values_part = sql[values_idx + 6..].trim();
+    if !values_part.starts_with('(') || !values_part.ends_with(')') {
+        return Err("Malformed VALUES clause in INSERT statement".to_string());
+    }
+    let values_inner = &values_part[1..values_part.len() - 1];
+    let values = split_comma_separated_values(values_inner)?;
+    
+    if fields.len() != values.len() {
+        return Err(format!("Column count ({}) does not match value count ({})", fields.len(), values.len()));
+    }
+    
+    Ok((collection, fields, values))
+}
 
-    // Construct Fluent Query JSON
-    let mut query_obj = Map::new();
+fn parse_update(sql: &str) -> Result<(String, Vec<(String, Value)>, Value), String> {
+    let sql = sql.trim().trim_end_matches(';');
+    
+    let update_idx = find_keyword(sql, "UPDATE").ok_or_else(|| "Missing UPDATE".to_string())?;
+    let set_idx = find_keyword(sql, "SET").ok_or_else(|| "Missing SET clause".to_string())?;
+    
+    if update_idx != 0 {
+        return Err("Query must start with UPDATE".to_string());
+    }
+    
+    let collection = sql[update_idx + 6..set_idx].trim().to_string();
+    if collection.is_empty() {
+        return Err("Collection name cannot be empty".to_string());
+    }
+    
+    let where_idx = find_keyword(sql, "WHERE");
+    
+    let assignments_str = match where_idx {
+        Some(w_idx) => &sql[set_idx + 3..w_idx],
+        None => &sql[set_idx + 3..],
+    }.trim();
+    
+    let assignments = split_comma_separated_assignments(assignments_str)?;
+    if assignments.is_empty() {
+        return Err("Missing assignments in SET clause".to_string());
+    }
+    
+    let conditions = match where_idx {
+        Some(w_idx) => {
+            let where_str = &sql[w_idx + 5..];
+            parse_where(where_str)?
+        }
+        None => Value::Object(Map::new()),
+    };
+    
+    Ok((collection, assignments, conditions))
+}
 
-    // 1. Where filters
-    if let Some(cond_map) = parsed.conditions.as_object() {
-        let mut where_list = Vec::new();
+fn parse_delete(sql: &str) -> Result<(String, Value), String> {
+    let sql = sql.trim().trim_end_matches(';');
+    
+    let delete_idx = find_keyword(sql, "DELETE FROM").ok_or_else(|| "Missing DELETE FROM".to_string())?;
+    if delete_idx != 0 {
+        return Err("Query must start with DELETE FROM".to_string());
+    }
+    
+    let where_idx = find_keyword(sql, "WHERE");
+    
+    let collection = match where_idx {
+        Some(w_idx) => sql[delete_idx + 11..w_idx].trim().to_string(),
+        None => sql[delete_idx + 11..].trim().to_string(),
+    };
+    
+    if collection.is_empty() {
+        return Err("Collection name cannot be empty".to_string());
+    }
+    
+    let conditions = match where_idx {
+        Some(w_idx) => {
+            let where_str = &sql[w_idx + 5..];
+            parse_where(where_str)?
+        }
+        None => Value::Object(Map::new()),
+    };
+    
+    Ok((collection, conditions))
+}
+
+// Executors for mutations
+fn execute_insert(i: &StoreInner, sql: &str) -> Result<SqlQueryResult, String> {
+    let (collection, fields, values) = parse_insert(sql)?;
+    
+    let mut map = Map::new();
+    for (f, v) in fields.iter().zip(values.iter()) {
+        map.insert(f.clone(), v.clone());
+    }
+    let new_record = Value::Object(map);
+    
+    let mut old_collection_val = Value::Array(vec![]);
+    let mut new_collection_val = Value::Array(vec![]);
+    let mut collection_existed = false;
+    
+    i.mutate(|data: &mut Value| {
+        let current_arr = match read_path(data, &collection) {
+            Some(Value::Array(a)) => {
+                collection_existed = true;
+                old_collection_val = Value::Array(a.clone());
+                a.clone()
+            }
+            _ => vec![],
+        };
+        
+        let mut new_arr = current_arr;
+        new_arr.push(new_record.clone());
+        new_collection_val = Value::Array(new_arr.clone());
+        
+        write_path(data, &collection, Value::Array(new_arr));
+    })?;
+    
+    Ok(SqlQueryResult {
+        value: json!(1), // 1 row affected
+        mutation: Some(SqlMutationInfo {
+            op: "set".to_string(),
+            collection: collection,
+            old_value: old_collection_val,
+            new_value: new_collection_val,
+            existed: collection_existed,
+        }),
+    })
+}
+
+fn execute_update(i: &StoreInner, sql: &str) -> Result<SqlQueryResult, String> {
+    let (collection, assignments, conditions) = parse_update(sql)?;
+    
+    let mut where_list = Vec::new();
+    if let Some(cond_map) = conditions.as_object() {
         for (field, cond_val) in cond_map {
             if let Some(cond_inner) = cond_val.as_object() {
-                let op = cond_inner.get("op").cloned().unwrap_or(json!("="));
+                let op = cond_inner.get("op").cloned().unwrap_or_else(|| json!("="));
                 let value = cond_inner.get("value").cloned().unwrap_or(Value::Null);
                 where_list.push(json!({
                     "field": field,
@@ -337,38 +551,191 @@ pub fn execute_sql(i: &StoreInner, sql: &str) -> Result<Value, String> {
                 }));
             }
         }
-        if !where_list.is_empty() {
-            query_obj.insert("where".to_string(), Value::Array(where_list));
+    }
+    
+    let mut old_collection_val = Value::Array(vec![]);
+    let mut new_collection_val = Value::Array(vec![]);
+    let mut collection_existed = false;
+    let mut affected_rows = 0;
+    
+    i.mutate(|data: &mut Value| {
+        let current_arr = match read_path(data, &collection) {
+            Some(Value::Array(a)) => {
+                collection_existed = true;
+                old_collection_val = Value::Array(a.clone());
+                a.clone()
+            }
+            _ => vec![],
+        };
+        
+        let mut new_arr = Vec::new();
+        for mut item in current_arr {
+            let is_match = where_list.iter().all(|cond| {
+                crate::query::fluent::check_condition(&item, cond)
+            });
+            if is_match {
+                for (field, val) in &assignments {
+                    crate::path::write_path(&mut item, field, val.clone());
+                }
+                affected_rows += 1;
+            }
+            new_arr.push(item);
+        }
+        
+        new_collection_val = Value::Array(new_arr.clone());
+        write_path(data, &collection, Value::Array(new_arr));
+    })?;
+    
+    Ok(SqlQueryResult {
+        value: json!(affected_rows),
+        mutation: Some(SqlMutationInfo {
+            op: "set".to_string(),
+            collection: collection,
+            old_value: old_collection_val,
+            new_value: new_collection_val,
+            existed: collection_existed,
+        }),
+    })
+}
+
+fn execute_delete(i: &StoreInner, sql: &str) -> Result<SqlQueryResult, String> {
+    let (collection, conditions) = parse_delete(sql)?;
+    
+    let mut where_list = Vec::new();
+    if let Some(cond_map) = conditions.as_object() {
+        for (field, cond_val) in cond_map {
+            if let Some(cond_inner) = cond_val.as_object() {
+                let op = cond_inner.get("op").cloned().unwrap_or_else(|| json!("="));
+                let value = cond_inner.get("value").cloned().unwrap_or(Value::Null);
+                where_list.push(json!({
+                    "field": field,
+                    "op": op,
+                    "value": value
+                }));
+            }
         }
     }
+    
+    let mut old_collection_val = Value::Array(vec![]);
+    let mut new_collection_val = Value::Array(vec![]);
+    let mut collection_existed = false;
+    let mut affected_rows = 0;
+    
+    i.mutate(|data: &mut Value| {
+        let current_arr = match read_path(data, &collection) {
+            Some(Value::Array(a)) => {
+                collection_existed = true;
+                old_collection_val = Value::Array(a.clone());
+                a.clone()
+            }
+            _ => vec![],
+        };
+        
+        let mut new_arr = Vec::new();
+        for item in current_arr {
+            let is_match = where_list.iter().all(|cond| {
+                crate::query::fluent::check_condition(&item, cond)
+            });
+            if is_match {
+                affected_rows += 1;
+            } else {
+                new_arr.push(item);
+            }
+        }
+        
+        new_collection_val = Value::Array(new_arr.clone());
+        write_path(data, &collection, Value::Array(new_arr));
+    })?;
+    
+    Ok(SqlQueryResult {
+        value: json!(affected_rows),
+        mutation: Some(SqlMutationInfo {
+            op: "set".to_string(),
+            collection: collection,
+            old_value: old_collection_val,
+            new_value: new_collection_val,
+            existed: collection_existed,
+        }),
+    })
+}
 
-    // 2. Order by
-    if let Some((field, is_desc)) = parsed.order_by {
-        let mut order_obj = Map::new();
-        order_obj.insert("field".to_string(), json!(field));
-        order_obj.insert("direction".to_string(), json!(if is_desc { "desc" } else { "asc" }));
-        query_obj.insert("order_by".to_string(), Value::Object(order_obj));
+pub fn execute_sql(i: &StoreInner, sql: &str) -> Result<SqlQueryResult, String> {
+    let sql_trimmed = sql.trim();
+    let sql_upper = sql_trimmed.to_uppercase();
+    
+    if sql_upper.starts_with("SELECT") {
+        let parsed = parse_sql_select(sql_trimmed)?;
+        let db_data = i.read().map_err(|e| e.to_string())?;
+        
+        let arr = match read_path(&db_data, &parsed.collection) {
+            Some(Value::Array(a)) => a,
+            _ => return Ok(SqlQueryResult {
+                value: Value::Array(vec![]),
+                mutation: None,
+            }),
+        };
+
+        // Construct Fluent Query JSON
+        let mut query_obj = Map::new();
+
+        // 1. Where filters
+        if let Some(cond_map) = parsed.conditions.as_object() {
+            let mut where_list = Vec::new();
+            for (field, cond_val) in cond_map {
+                if let Some(cond_inner) = cond_val.as_object() {
+                    let op = cond_inner.get("op").cloned().unwrap_or_else(|| json!("="));
+                    let value = cond_inner.get("value").cloned().unwrap_or(Value::Null);
+                    where_list.push(json!({
+                        "field": field,
+                        "op": op,
+                        "value": value
+                    }));
+                }
+            }
+            if !where_list.is_empty() {
+                query_obj.insert("where".to_string(), Value::Array(where_list));
+            }
+        }
+
+        // 2. Order by
+        if let Some((field, is_desc)) = parsed.order_by {
+            let mut order_obj = Map::new();
+            order_obj.insert("field".to_string(), json!(field));
+            order_obj.insert("direction".to_string(), json!(if is_desc { "desc" } else { "asc" }));
+            query_obj.insert("order_by".to_string(), Value::Object(order_obj));
+        }
+
+        // 3. Limit
+        if let Some(l) = parsed.limit {
+            query_obj.insert("limit".to_string(), json!(l as u64));
+        }
+
+        // 4. Skip/Offset
+        if let Some(o) = parsed.offset {
+            query_obj.insert("skip".to_string(), json!(o as u64));
+        }
+
+        // 5. Select projection
+        if !parsed.fields.is_empty() {
+            let field_vals: Vec<Value> = parsed.fields.iter().map(|f| json!(f)).collect();
+            query_obj.insert("select".to_string(), Value::Array(field_vals));
+        }
+
+        let query_val = Value::Object(query_obj);
+        let results = execute_query(arr, &query_val);
+        Ok(SqlQueryResult {
+            value: Value::Array(results),
+            mutation: None,
+        })
+    } else if sql_upper.starts_with("INSERT") {
+        execute_insert(i, sql_trimmed)
+    } else if sql_upper.starts_with("UPDATE") {
+        execute_update(i, sql_trimmed)
+    } else if sql_upper.starts_with("DELETE") {
+        execute_delete(i, sql_trimmed)
+    } else {
+        Err("Unsupported SQL statement. Only SELECT, INSERT, UPDATE, and DELETE are supported.".to_string())
     }
-
-    // 3. Limit
-    if let Some(l) = parsed.limit {
-        query_obj.insert("limit".to_string(), json!(l as u64));
-    }
-
-    // 4. Skip/Offset
-    if let Some(o) = parsed.offset {
-        query_obj.insert("skip".to_string(), json!(o as u64));
-    }
-
-    // 5. Select projection
-    if !parsed.fields.is_empty() {
-        let field_vals: Vec<Value> = parsed.fields.iter().map(|f| json!(f)).collect();
-        query_obj.insert("select".to_string(), Value::Array(field_vals));
-    }
-
-    let query_val = Value::Object(query_obj);
-    let results = execute_query(arr, &query_val);
-    Ok(Value::Array(results))
 }
 
 #[cfg(test)]
@@ -391,5 +758,28 @@ mod tests {
         assert_eq!(q.limit, Some(10));
         assert_eq!(q.offset, Some(5));
         assert_eq!(q.order_by, Some(("name".to_string(), true)));
+    }
+
+    #[test]
+    fn test_parse_insert() {
+        let (collection, fields, values) = parse_insert("INSERT INTO users (name, age, active) VALUES ('Alice', 30, true)").unwrap();
+        assert_eq!(collection, "users");
+        assert_eq!(fields, vec!["name", "age", "active"]);
+        assert_eq!(values, vec![json!("Alice"), json!(30), json!(true)]);
+    }
+
+    #[test]
+    fn test_parse_update() {
+        let (collection, assignments, conditions) = parse_update("UPDATE users SET age = 31, active = false WHERE id = 42").unwrap();
+        assert_eq!(collection, "users");
+        assert_eq!(assignments, vec![("age".to_string(), json!(31)), ("active".to_string(), json!(false))]);
+        assert_eq!(conditions.get("id").unwrap().get("value").unwrap(), &json!(42));
+    }
+
+    #[test]
+    fn test_parse_delete() {
+        let (collection, conditions) = parse_delete("DELETE FROM users WHERE active = false").unwrap();
+        assert_eq!(collection, "users");
+        assert_eq!(conditions.get("active").unwrap().get("value").unwrap(), &json!(false));
     }
 }

@@ -152,7 +152,7 @@ fn exclude_fields(results: &[Value], fields: &[&str]) -> Vec<Value> {
 
 
 /// Check if an item matches a where condition
-fn check_condition(item: &Value, condition: &Value) -> bool {
+pub(crate) fn check_condition(item: &Value, condition: &Value) -> bool {
     let field = condition
         .get("field")
         .and_then(|v| v.as_str())

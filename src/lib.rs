@@ -633,7 +633,18 @@ impl JsonStore {
             .as_ref()
             .ok_or_else(|| PhpException::from("Store not initialized"))?;
         match query::sql::execute_sql(i, &sql) {
-            Ok(val) => Ok(value_to_zval(&val)),
+            Ok(result) => {
+                if let Some(mut_info) = result.mutation {
+                    self.log_revision(
+                        &mut_info.op,
+                        &mut_info.collection,
+                        mut_info.old_value,
+                        mut_info.new_value,
+                        mut_info.existed,
+                    );
+                }
+                Ok(value_to_zval(&result.value))
+            }
             Err(e) => Err(PhpException::from(e)),
         }
     }
