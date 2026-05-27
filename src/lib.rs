@@ -105,11 +105,13 @@ fn plk(arr: &Vec<Value>, fields: &[&str]) -> Vec<Value> {
 #[php(name = "JsonQ\\Store")]
 pub struct JsonStore {
     inner: Option<StoreInner>,
+    main_path: PathBuf,
 }
 
 #[php_impl]
 impl JsonStore {
     pub fn __construct(path: String) -> Self {
+        let main_path = PathBuf::from(&path);
         match StoreInner::new(path) {
             Ok(inner) => {
                 // If file exists, trigger a read to validate content (e.g. UTF-8)
@@ -123,11 +125,11 @@ impl JsonStore {
                                 ext_php_rs::zend::ce::exception(),
                             )
                             .throw();
-                            return Self { inner: None };
+                            return Self { inner: None, main_path };
                         }
                     }
                 }
-                Self { inner: Some(inner) }
+                Self { inner: Some(inner), main_path }
             },
             Err(e) => {
                 let _ = PhpException::new(
@@ -136,7 +138,7 @@ impl JsonStore {
                     ext_php_rs::zend::ce::exception(),
                 )
                 .throw();
-                Self { inner: None }
+                Self { inner: None, main_path }
             }
         }
     }
@@ -888,6 +890,153 @@ impl JsonStore {
         Ok(true)
     }
 
+
+
+    #[php(name = "createBranch")]
+    pub fn create_branch(&self, name: String) -> PhpResult<bool> {
+        let i = self.inner.as_ref().ok_or_else(|| "JsonQ Store not initialized".to_string())?;
+        let branch_path = self.get_branch_path(&name).map_err(|e| PhpException::from(e))?;
+        
+        if branch_path.exists() {
+            return Ok(false);
+        }
+
+        // Copy database file
+        fs::copy(&i.path, &branch_path).map_err(|e| format!("Failed to copy database file: {}", e))?;
+
+        // Scan directory for index files
+        let parent = i.path.parent().unwrap_or_else(|| std::path::Path::new(""));
+        let stem = i.path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                    // Check if it's an index file of the current database
+                    // Index naming convention is {stem}.{collection}.{hash}.idx or .vidx
+                    if filename.starts_with(&format!("{}.", stem)) && (filename.ends_with(".idx") || filename.ends_with(".vidx")) {
+                        // Extract suffix after {stem}.
+                        let suffix = &filename[stem.len() + 1..];
+                        // Target index filename: {branch_stem}.{collection}.{hash}.idx or .vidx
+                        let branch_stem = branch_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                        let target_filename = format!("{}.{}", branch_stem, suffix);
+                        let target_path = parent.join(target_filename);
+                        let _ = fs::copy(&path, target_path);
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    #[php(name = "switchBranch")]
+    pub fn switch_branch(&mut self, name: String) -> PhpResult<bool> {
+        let branch_path = self.get_branch_path(&name).map_err(|e| PhpException::from(e))?;
+        if !branch_path.exists() {
+            return Ok(false);
+        }
+
+        let new_store = StoreInner::new(branch_path.to_str().unwrap().to_string())?;
+        self.inner = Some(new_store);
+        Ok(true)
+    }
+
+    #[php(name = "listBranches")]
+    pub fn list_branches(&self) -> PhpResult<Zval> {
+        let parent = self.main_path.parent().unwrap_or_else(|| std::path::Path::new(""));
+        let stem = self.main_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let ext = self.main_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+
+        let mut branches = Vec::new();
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                    // Check if it is a branch file (i.e. starts with stem. and ends with .ext)
+                    // and is NOT an index/lock/tx/tmp file or the main database file
+                    if filename != self.main_path.file_name().and_then(|f| f.to_str()).unwrap_or("")
+                        && filename.starts_with(&format!("{}.", stem))
+                        && filename.ends_with(&format!(".{}", ext))
+                        && !filename.ends_with(".idx")
+                        && !filename.ends_with(".vidx")
+                        && !filename.ends_with(".lock")
+                        && !filename.ends_with(".tx")
+                        && !filename.ends_with(".tmp")
+                    {
+                        // Extract branch name from: stem.{branch_name}.ext
+                        let start_idx = stem.len() + 1;
+                        let end_idx = filename.len() - ext.len() - 1;
+                        if end_idx > start_idx {
+                            let branch_name = &filename[start_idx..end_idx];
+                            // Also verify it doesn't contain extra dots that make it an index file
+                            if !branch_name.contains('.') {
+                                branches.push(branch_name.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let json_arr = Value::Array(branches.into_iter().map(Value::String).collect());
+        Ok(value_to_zval(&json_arr))
+    }
+
+    #[php(name = "deleteBranch")]
+    pub fn delete_branch(&self, name: String) -> PhpResult<bool> {
+        if name.is_empty() || name == "main" || name == "master" {
+            return Err("Cannot delete the main database branch".to_string().into());
+        }
+
+        let branch_path = self.get_branch_path(&name).map_err(|e| PhpException::from(e))?;
+        if !branch_path.exists() {
+            return Ok(false);
+        }
+
+        // Delete the main database file of the branch
+        let _ = fs::remove_file(&branch_path);
+
+        // Delete any associated index files
+        let parent = branch_path.parent().unwrap_or_else(|| std::path::Path::new(""));
+        let stem = branch_path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if let Ok(entries) = fs::read_dir(parent) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    let filename = path.file_name().and_then(|f| f.to_str()).unwrap_or("");
+                    if filename.starts_with(&format!("{}.", stem)) && (filename.ends_with(".idx") || filename.ends_with(".vidx") || filename.ends_with(".lock") || filename.ends_with(".tx")) {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+
+        Ok(true)
+    }
+
+    #[php(name = "mergeBranch")]
+    pub fn merge_branch(&self, name: String) -> PhpResult<bool> {
+        let i = self.inner.as_ref().ok_or_else(|| "JsonQ Store not initialized".to_string())?;
+        let branch_path = self.get_branch_path(&name).map_err(|e| PhpException::from(e))?;
+        if !branch_path.exists() {
+            return Err(format!("Branch '{}' does not exist", name).into());
+        }
+
+        // Load branch data
+        let branch_store = StoreInner::new(branch_path.to_str().unwrap().to_string())?;
+        let branch_data = branch_store.read()?;
+
+        // Mutate current store data by merging
+        i.mutate(|current_data| {
+            crate::utils::merge_values(current_data, &branch_data);
+        })?;
+
+        Ok(true)
+    }
+
     #[php(name = "getMetrics")]
     pub fn get_metrics(&self) -> PhpResult<Zval> {
         let i = self.inner.as_ref().ok_or_else(|| "Not init".to_string())?;
@@ -1206,6 +1355,30 @@ impl JsonStore {
         match target {
             Value::Object(obj) => Ok(obj.values().map(value_to_zval).collect()),
             _ => Ok(Vec::new()),
+        }
+    }
+}
+
+impl JsonStore {
+    fn get_branch_path(&self, name: &str) -> Result<PathBuf, String> {
+        if name.is_empty() || name == "main" || name == "master" {
+            Ok(self.main_path.clone())
+        } else {
+            let parent = self.main_path.parent().unwrap_or_else(|| std::path::Path::new(""));
+            let file_stem = self.main_path.file_stem()
+                .ok_or_else(|| "Invalid main database path".to_string())?
+                .to_str()
+                .ok_or_else(|| "Invalid database name encoding".to_string())?;
+            let extension = self.main_path.extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("json");
+            
+            // Clean/validate name to prevent directory traversal
+            if name.contains('/') || name.contains('\\') || name.contains("..") {
+                return Err("Invalid branch name (traversal or directory separators detected)".to_string());
+            }
+
+            Ok(parent.join(format!("{}.{}.{}", file_stem, name, extension)))
         }
     }
 }

@@ -19,6 +19,9 @@ permissions:
   pages: write         # For publishing APT repo to GitHub Pages
   id-token: write      # For Pages deployment
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # ══════════════════════════════════════════════════════════════
 # Strategy: Build a .deb for each PHP version × architecture,
 # then assemble them into an APT repository on GitHub Pages.
@@ -46,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -82,7 +85,7 @@ jobs:
           dpkg-deb --contents "$DEB_FILE"
 
       - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: deb-php${{ matrix.php }}-${{ matrix.arch }}
           path: build/out/*.deb
@@ -100,7 +103,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
@@ -108,7 +111,7 @@ jobs:
           php-version: ${{ matrix.php }}
 
       - name: Download .deb
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: deb-php${{ matrix.php }}-amd64
           path: debs/
@@ -134,10 +137,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download all .deb artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           path: artifacts/
           pattern: deb-*
@@ -201,7 +204,7 @@ jobs:
           EOF
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/out/*.deb
           generate_release_notes: true

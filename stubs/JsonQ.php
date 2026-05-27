@@ -10,7 +10,7 @@
  * In production, the native Rust extension provides the real implementations.
  *
  * @package  JsonQ
- * @version  0.6.0
+ * @version  0.7.0
  * @license  The PHP License, version 3.01
  * @link     https://github.com/mameyugo/JsonQ
  */
@@ -28,7 +28,7 @@ namespace {
     /**
      * Get the JsonQ extension version.
      *
-     * @return string Semantic version string (e.g., "0.6.0")
+     * @return string Semantic version string (e.g., "0.7.0")
      */
     function jsonq_version(): string
     {
@@ -735,6 +735,47 @@ namespace JsonQ {
              * @throws \Exception On I/O error
              */
             public function restore(string $path): bool {}
+
+            /**
+             * Creates an isolated branch of the database.
+             *
+             * @param string $name Branch name.
+             * @return bool True if created successfully, false if the branch already exists.
+             */
+            public function createBranch(string $name): bool {}
+
+            /**
+             * Switches the active connection to another branch.
+             *
+             * Use "main" or "master" or empty string to switch back to the original database.
+             *
+             * @param string $name Branch name.
+             * @return bool True if switched successfully, false if the branch does not exist.
+             */
+            public function switchBranch(string $name): bool {}
+
+            /**
+             * Lists all available branches for this database.
+             *
+             * @return string[] Array of branch names.
+             */
+            public function listBranches(): array {}
+
+            /**
+             * Deletes a database branch and all its associated index files.
+             *
+             * @param string $name Branch name.
+             * @return bool True if deleted successfully, false if the branch does not exist.
+             */
+            public function deleteBranch(string $name): bool {}
+
+            /**
+             * Merges the changes from a branch into the currently active branch using a deep merge.
+             *
+             * @param string $name Branch name to merge.
+             * @return bool True if merged successfully.
+             */
+            public function mergeBranch(string $name): bool {}
         } // end class Store
 
     } // end if (!extension_loaded('jsonq'))

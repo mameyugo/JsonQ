@@ -16,7 +16,7 @@ echo str_repeat('═', 50) . "\n";
 echo "\n📦 Module\n";
 
 test('jsonq_version returns string', function() {
-    assert_eq('0.6.0', jsonq_version());
+    assert_eq('0.7.0', jsonq_version());
 });
 
 test('JsonQ\\Store class exists', function() {
@@ -712,6 +712,84 @@ test('search finds in nested fields', function() {
     $r = $s->search('items', 'programming');
     assert_count(1, $r);
     assert_eq('PHP Book', $r[0]['title']);
+});
+
+// ── Database Branching ──
+echo "\n🌿 Database Branching\n";
+
+test('branch creation, switching, isolation, merge, and deletion', function() {
+    $s = fresh_store();
+    $s->set('users', [
+        ['id' => 1, 'name' => 'Alice'],
+        ['id' => 2, 'name' => 'Bob'],
+    ]);
+    $s->set('config', [
+        'theme' => 'light',
+        'debug' => false,
+    ]);
+    
+    // Create an index to test index copying
+    $s->createIndex('users', 'name');
+
+    // Create branch
+    $created = $s->createBranch('dev');
+    assert_true($created, 'Should create branch dev');
+
+    // Trying to create branch with same name should return false
+    $recreated = $s->createBranch('dev');
+    assert_false($recreated, 'Should not recreate branch dev');
+
+    // List branches
+    $branches = $s->listBranches();
+    assert_true(in_array('dev', $branches), 'dev should be listed in branches');
+
+    // Switch to branch dev
+    $switched = $s->switchBranch('dev');
+    assert_true($switched, 'Should switch to branch dev');
+
+    // Verify initial branch data is identical
+    assert_eq('Alice', $s->get('users.0.name'));
+    assert_eq('light', $s->get('config.theme'));
+
+    // Mutate branch data
+    $s->set('users.0.name', 'Alice-Dev');
+    $s->set('users.1.name', 'Bob-Dev');
+    $s->set('config.theme', 'dark');
+    $s->set('branch_only', 'yes');
+    
+    assert_eq('Alice-Dev', $s->get('users.0.name'));
+    assert_eq('dark', $s->get('config.theme'));
+    assert_true($s->get('branch_only') === 'yes');
+
+    // Switch back to main
+    $switchedBack = $s->switchBranch('main');
+    assert_true($switchedBack, 'Should switch back to main');
+
+    // Verify main data is unchanged (isolation)
+    assert_eq('Alice', $s->get('users.0.name'));
+    assert_eq('light', $s->get('config.theme'));
+    assert_false($s->has('branch_only'), 'Main should not have branch_only key');
+
+    // Merge dev branch into main
+    $merged = $s->mergeBranch('dev');
+    assert_true($merged, 'Should merge branch dev');
+
+    // Verify merged data is present in main
+    // Note: merging of arrays appends the branch elements (concatenates)
+    assert_eq('Alice', $s->get('users.0.name'));
+    assert_eq('Alice-Dev', $s->get('users.2.name'));
+    assert_eq('Bob-Dev', $s->get('users.3.name'));
+    // Merging of objects updates properties in place
+    assert_eq('dark', $s->get('config.theme'));
+    assert_eq('yes', $s->get('branch_only'));
+
+    // Delete branch
+    $deleted = $s->deleteBranch('dev');
+    assert_true($deleted, 'Should delete branch dev');
+
+    // Verify branch is no longer listed
+    $branchesAfter = $s->listBranches();
+    assert_false(in_array('dev', $branchesAfter), 'dev should not be listed after deletion');
 });
 
 // ═══════════════════════════════════════════

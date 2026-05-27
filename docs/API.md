@@ -1,4 +1,4 @@
-# JsonQ API Reference (v0.6.0)
+# JsonQ API Reference (v0.7.0)
 
 Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` function.
 
@@ -12,6 +12,7 @@ Complete reference for all `JsonQ\\Store` methods and the `jsonq_version()` func
 - [Aggregation](#aggregation)
 - [Schema Validation](#schema-validation)
 - [Indexes](#indexes)
+- [Database Branching](#database-branching)
 - [Utilities](#utilities)
 - [Standalone Functions](#standalone-functions)
 
@@ -505,6 +506,57 @@ Drops all indexes across all collections. Returns the number of collections affe
 
 ---
 
+## Database Branching
+
+Allows managing isolated local branches of the database, mirroring Turso-like branching capabilities for testing, development, and staging setups. Branching clones the main database file and its associated index files.
+
+### `createBranch(string $name): bool`
+
+Creates an isolated branch of the database. Returns `true` if created successfully, or `false` if a branch with the same name already exists.
+
+```php
+$store->createBranch('dev');
+```
+
+### `switchBranch(string $name): bool`
+
+Switches the active connection to another branch. Use `'main'`, `'master'`, or an empty string `''` to switch back to the original database. Returns `true` if switched successfully.
+
+```php
+$store->switchBranch('dev');
+// All subsequent read/write operations now act on the 'dev' branch.
+
+$store->switchBranch('main');
+// Switched back to the main database file.
+```
+
+### `listBranches(): array`
+
+Lists all available branch names for this database.
+
+```php
+$branches = $store->listBranches(); // ['dev']
+```
+
+### `mergeBranch(string $name): bool`
+
+Merges the changes from the specified branch back into the currently active branch using a deep merge.
+
+```php
+$store->switchBranch('main');
+$store->mergeBranch('dev'); // Integrates 'dev' mutations into 'main'
+```
+
+### `deleteBranch(string $name): bool`
+
+Deletes a database branch and all of its associated index, lock, and transaction files. Returns `true` if deleted successfully.
+
+```php
+$store->deleteBranch('dev');
+```
+
+---
+
 ## Utilities
 
 ### `stats(): array`
@@ -549,5 +601,5 @@ $store->restore('/backups/snap.json');
 Returns the extension version string.
 
 ```php
-echo jsonq_version(); // "0.6.0"
+echo jsonq_version(); // "0.7.0"
 ```

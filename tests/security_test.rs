@@ -3,7 +3,6 @@ use jsonq::security::{validate_file_size, validate_path, validate_path_depth};
 use jsonq::validation::validate;
 use serde_json::json;
 use std::fs;
-use std::sync::Arc;
 use tempfile::tempdir;
 
 #[test]

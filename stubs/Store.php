@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.6.0
+ * @version 0.7.0
  * @license The PHP License, version 3.01
  */
 
@@ -545,4 +545,45 @@ class Store
      * @return float|int
      */
     public function streamAggregate(string $pointer, string $operation, string $field, ?array $conditions = null): float|int {}
+
+    /**
+     * Creates an isolated branch of the database.
+     *
+     * @param string $name Branch name.
+     * @return bool True if created successfully, false if the branch already exists.
+     */
+    public function createBranch(string $name): bool {}
+
+    /**
+     * Switches the active connection to another branch.
+     *
+     * Use "main" or "master" or empty string to switch back to the original database.
+     *
+     * @param string $name Branch name.
+     * @return bool True if switched successfully, false if the branch does not exist.
+     */
+    public function switchBranch(string $name): bool {}
+
+    /**
+     * Lists all available branches for this database.
+     *
+     * @return string[] Array of branch names.
+     */
+    public function listBranches(): array {}
+
+    /**
+     * Deletes a database branch and all its associated index files.
+     *
+     * @param string $name Branch name.
+     * @return bool True if deleted successfully, false if the branch does not exist.
+     */
+    public function deleteBranch(string $name): bool {}
+
+    /**
+     * Merges the changes from a branch into the currently active branch using a deep merge.
+     *
+     * @param string $name Branch name to merge.
+     * @return bool True if merged successfully.
+     */
+    public function mergeBranch(string $name): bool {}
 }
