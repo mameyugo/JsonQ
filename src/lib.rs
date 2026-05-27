@@ -650,6 +650,87 @@ impl JsonStore {
         }
     }
 
+    #[php(name = "createVectorIndex")]
+    pub fn create_vector_index(&self, collection: String, field: String, options: Option<&Zval>) -> bool {
+        let i = match &self.inner {
+            Some(i) => i,
+            None => return false,
+        };
+
+        let mut dimension = None;
+        let mut metric = "cosine".to_string();
+
+        if let Some(opts_z) = options {
+            let opts_val = zval_to_value(opts_z);
+            if let Some(obj) = opts_val.as_object() {
+                if let Some(dim_val) = obj.get("dimension") {
+                    if let Some(d) = dim_val.as_i64() {
+                        dimension = Some(d as usize);
+                    }
+                }
+                if let Some(metric_val) = obj.get("metric") {
+                    if let Some(m) = metric_val.as_str() {
+                        metric = m.to_string();
+                    }
+                }
+            }
+        }
+
+        i.build_vector_index(&collection, &field, dimension, &metric).is_ok()
+    }
+
+    #[php(name = "vectorSearch")]
+    pub fn vector_search(
+        &self,
+        collection: String,
+        field: String,
+        query_vector: &Zval,
+        limit: i64,
+        metric: Option<String>,
+    ) -> PhpResult<Zval> {
+        let i = self.inner.as_ref().ok_or_else(|| "JsonQ Store not initialized".to_string())?;
+
+        let q_vec = {
+            let val = zval_to_value(query_vector);
+            let arr = val.as_array().ok_or_else(|| "Query vector must be an array".to_string())?;
+            let mut vec = Vec::with_capacity(arr.len());
+            for item in arr {
+                let n = item.as_f64().ok_or_else(|| "Query vector must contain only numbers".to_string())?;
+                vec.push(n as f32);
+            }
+            vec
+        };
+
+        i.ensure_vector_index_loaded(&collection, &field);
+
+        let cd = i.read()?;
+        let arr = match read_path(&cd, &collection) {
+            Some(Value::Array(a)) => a,
+            _ => return Err(format!("'{}' is not an array collection", collection).into()),
+        };
+
+        let indexes = i.indexes.read().map_err(|e| format!("Indexes lock poisoned: {}", e))?;
+        let vidx = indexes
+            .get(&collection)
+            .and_then(|store| store.vector.get(&field));
+
+        let resolved_metric = metric
+            .or_else(|| vidx.map(|idx| idx.metric.clone()))
+            .unwrap_or_else(|| "cosine".to_string());
+
+        let results = crate::query::vector::execute_vector_search(
+            arr,
+            &field,
+            &q_vec,
+            limit as usize,
+            &resolved_metric,
+            vidx,
+        )?;
+
+        let results_val = serde_json::to_value(&results).map_err(|e| e.to_string())?;
+        Ok(value_to_zval(&results_val))
+    }
+
     #[php(name = "listIndexes")]
     pub fn list_indexes(&self) -> Zval {
         let i: &StoreInner = match &self.inner {
@@ -658,7 +739,7 @@ impl JsonStore {
         };
         let idx = match i.indexes.read() {
             Ok(lock) => lock,
-            Err(e) => e.into_inner(), // Recovery
+            Err(e) => e.into_inner(),
         };
         let mut r = Vec::new();
         for (c, s) in idx.iter() {
@@ -671,6 +752,17 @@ impl JsonStore {
                 let uv = im.len();
                 let te: usize = im.values().map(|v: &Vec<usize>| v.len()).sum();
                 r.push(json!({"collection":c,"type":"compound","fields":f,"unique_values":uv,"total_entries":te}));
+            }
+            for (f, vidx) in &s.vector {
+                let uv = vidx.entries.len();
+                r.push(json!({
+                    "collection": c,
+                    "type": "vector",
+                    "field": f,
+                    "dimension": vidx.dimension,
+                    "metric": vidx.metric,
+                    "total_entries": uv
+                }));
             }
         }
         value_to_zval(&Value::Array(r))

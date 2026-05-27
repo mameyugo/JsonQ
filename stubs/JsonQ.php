@@ -10,7 +10,7 @@
  * In production, the native Rust extension provides the real implementations.
  *
  * @package  JsonQ
- * @version  0.5.1
+ * @version  0.6.0
  * @license  The PHP License, version 3.01
  * @link     https://github.com/mameyugo/JsonQ
  */
@@ -28,7 +28,7 @@ namespace {
     /**
      * Get the JsonQ extension version.
      *
-     * @return string Semantic version string (e.g., "0.5.1")
+     * @return string Semantic version string (e.g., "0.6.0")
      */
     function jsonq_version(): string
     {
@@ -553,6 +553,28 @@ namespace JsonQ {
              * @return array|null         Matching records, or null if no index exists
              */
             public function indexLookup(string $collection, string $field, mixed $value): mixed {}
+
+            /**
+             * Create a native vector index on a field.
+             *
+             * @param string $collection Path to the array
+             * @param string $field Field to index
+             * @param array $options Options: ['dimension' => int, 'metric' => 'cosine'|'l2'|'dot']
+             * @return bool
+             */
+            public function createVectorIndex(string $collection, string $field, array $options = []): bool {}
+
+            /**
+             * Search for items in a collection based on vector similarity.
+             *
+             * @param string $collection Path to the array
+             * @param string $field Field containing the vector embeddings
+             * @param array $queryVector Float array representation of the query embedding
+             * @param int $limit Max number of matches to return
+             * @param string|null $metric Optional metric override: 'cosine', 'l2', 'dot'
+             * @return array Array of matching items wrapped with scores: [['score' => float, 'item' => array], ...]
+             */
+            public function vectorSearch(string $collection, string $field, array $queryVector, int $limit = 5, ?string $metric = null): array {}
 
             /**
              * List all active indexes with statistics.

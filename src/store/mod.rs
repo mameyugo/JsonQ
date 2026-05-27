@@ -46,7 +46,7 @@ pub mod options;
 pub mod transaction;
 
 pub use cache::CachedData;
-pub use index_store::IndexStore;
+pub use index_store::{IndexStore, VectorIndex, VectorEntry};
 pub use inner::StoreInner;
 pub use locking::LockGuard;
 pub use options::StoreOpts;

@@ -140,6 +140,66 @@ impl IndexBuilder {
 
         index
     }
+
+    /// Build a vector index
+    ///
+    /// Pre-parses and validates vector embeddings (arrays of numbers)
+    /// from the collection to enable high-speed native vector searches.
+    pub fn build_vector(
+        &self,
+        collection: &[Value],
+        field: &str,
+        dimension: Option<usize>,
+        metric: &str,
+        built_at: u64,
+    ) -> Result<crate::store::index_store::VectorIndex, String> {
+        let mut entries = Vec::new();
+
+        for (position, item) in collection.iter().enumerate() {
+            if let Some(val) = read_path(item, field) {
+                if let Some(arr) = val.as_array() {
+                    let mut vec = Vec::with_capacity(arr.len());
+                    for num in arr {
+                        if let Some(f) = num.as_f64() {
+                            vec.push(f as f32);
+                        } else {
+                            vec.clear();
+                            break;
+                        }
+                    }
+                    if !vec.is_empty() {
+                        if let Some(d) = dimension {
+                            if vec.len() != d {
+                                return Err(format!(
+                                    "Vector dimension mismatch at position {}: expected {}, got {}",
+                                    position, d, vec.len()
+                                ));
+                            }
+                        }
+                        entries.push(crate::store::index_store::VectorEntry {
+                            index: position,
+                            vector: vec,
+                        });
+                    }
+                }
+            }
+        }
+
+        let resolved_dimension = if let Some(d) = dimension {
+            Some(d)
+        } else if !entries.is_empty() {
+            Some(entries[0].vector.len())
+        } else {
+            None
+        };
+
+        Ok(crate::store::index_store::VectorIndex {
+            dimension: resolved_dimension,
+            metric: metric.to_string(),
+            entries,
+            built_at,
+        })
+    }
 }
 
 impl Default for IndexBuilder {

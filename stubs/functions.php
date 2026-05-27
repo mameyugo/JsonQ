@@ -5,14 +5,14 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.5.1
+ * @version 0.6.0
  * @license The PHP License, version 3.01
  */
 
 /**
  * Get the JsonQ extension version.
  *
- * @return string Semantic version string (e.g., "0.5.1")
+ * @return string Semantic version string (e.g., "0.6.0")
  */
 function jsonq_version(): string {}
 

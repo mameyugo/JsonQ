@@ -26,3 +26,4 @@ debug_*
 files/*
 files.zip
 test_*.txt
+.phpunit.result.cache

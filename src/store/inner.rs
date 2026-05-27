@@ -2,7 +2,7 @@
 
 use super::options::CompressionMethod;
 use super::transaction::TransactionState;
-use super::{CachedData, IndexStore, LockGuard, StoreOpts};
+use super::{CachedData, IndexStore, LockGuard, StoreOpts, VectorIndex};
 use crate::metrics::Metrics;
 use crate::store::cleanup::{cleanup_temp_files, TempFileGuard};
 use crate::utils::interner::KeyInterner;
@@ -618,6 +618,39 @@ impl StoreInner {
         Ok(())
     }
 
+    /// Build a native vector index on a collection field.
+    pub fn build_vector_index(
+        &self,
+        coll: &str,
+        field: &str,
+        dimension: Option<usize>,
+        metric: &str,
+    ) -> Result<(), String> {
+        let mt = self.mtime();
+        let cd = self.read()?; // This handles its own locking
+        let arr = match crate::path::read_path(&cd, coll) {
+            Some(Value::Array(a)) => a,
+            _ => return Err(format!("'{}' not array", coll)),
+        };
+
+        let builder = crate::index::IndexBuilder::new();
+        let vidx = builder.build_vector(arr, field, dimension, metric, mt)?;
+
+        let mut indexes = self
+            .indexes
+            .write()
+            .map_err(|e| format!("Index lock poisoned: {}", e))?;
+        let store = indexes
+            .entry(coll.to_string())
+            .or_insert_with(IndexStore::new);
+        store.vector.insert(field.to_string(), vidx);
+        store.built_at = mt;
+        drop(indexes); // Drop lock before persistence
+
+        self.persist_vector_index(coll, field)?;
+        Ok(())
+    }
+
     pub fn idx_lookup(&self, coll: &str, field: &str, value: &Value) -> Option<Vec<usize>> {
         // Try to load index first
         let _ = self.ensure_index_loaded(coll, field);
@@ -720,6 +753,76 @@ impl StoreInner {
             .or_insert_with(IndexStore::new);
 
         store.single.insert(field.to_string(), idx_map);
+        store.built_at = built_at;
+
+        Ok(())
+    }
+
+    fn vector_index_file_path(&self, collection: &str, field: &str) -> PathBuf {
+        let hash = format!("{:x}", md5::compute(field));
+        self.path
+            .with_extension(format!("{}.{}.vidx", collection, hash))
+    }
+
+    fn persist_vector_index(&self, collection: &str, field: &str) -> Result<(), String> {
+        let indexes = self
+            .indexes
+            .read()
+            .map_err(|e| format!("Index lock poisoned: {}", e))?;
+
+        if let Some(store) = indexes.get(collection) {
+            if let Some(vidx) = store.vector.get(field) {
+                let path = self.vector_index_file_path(collection, field);
+                let data =
+                    bincode::serialize(&(store.built_at, vidx)).map_err(|e| e.to_string())?;
+                fs::write(&path, data).map_err(|e| e.to_string())?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn ensure_vector_index_loaded(&self, collection: &str, field: &str) -> bool {
+        {
+            let indexes = self.indexes.read().ok();
+            if let Some(indexes_guard) = indexes {
+                if let Some(store) = indexes_guard.get(collection) {
+                    if store.vector.contains_key(field) {
+                        if store.built_at >= self.mtime() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.load_vector_index_from_disk(collection, field).is_ok()
+    }
+
+    fn load_vector_index_from_disk(&self, collection: &str, field: &str) -> Result<(), String> {
+        let path = self.vector_index_file_path(collection, field);
+        if !path.exists() {
+            return Err("Vector index file not found".to_string());
+        }
+
+        let data = fs::read(&path).map_err(|e| e.to_string())?;
+        let (built_at, vidx): (u64, VectorIndex) =
+            bincode::deserialize(&data).map_err(|e| e.to_string())?;
+
+        let current_mtime = self.mtime();
+        if built_at < current_mtime {
+            let _ = fs::remove_file(&path);
+            return Err("Vector index is stale".to_string());
+        }
+
+        let mut indexes = self
+            .indexes
+            .write()
+            .map_err(|e| format!("Index lock poisoned: {}", e))?;
+        let store = indexes
+            .entry(collection.to_string())
+            .or_insert_with(IndexStore::new);
+
+        store.vector.insert(field.to_string(), vidx);
         store.built_at = built_at;
 
         Ok(())

@@ -5,7 +5,7 @@
  * IDE autocompletion stubs. Do not include this file at runtime.
  *
  * @package JsonQ
- * @version 0.5.1
+ * @version 0.6.0
  * @license The PHP License, version 3.01
  */
 
@@ -293,6 +293,28 @@ class Store
      * @return array|null Matching records, or null if index not found
      */
     public function indexLookup(string $collection, string $field, mixed $value): mixed {}
+
+    /**
+     * Create a native vector index on a field.
+     *
+     * @param string $collection Path to the array
+     * @param string $field Field to index
+     * @param array $options Options: ['dimension' => int, 'metric' => 'cosine'|'l2'|'dot']
+     * @return bool
+     */
+    public function createVectorIndex(string $collection, string $field, array $options = []): bool {}
+
+    /**
+     * Search for items in a collection based on vector similarity.
+     *
+     * @param string $collection Path to the array
+     * @param string $field Field containing the vector embeddings
+     * @param array $queryVector Float array representation of the query embedding
+     * @param int $limit Max number of matches to return
+     * @param string|null $metric Optional metric override: 'cosine', 'l2', 'dot'
+     * @return array Array of matching items wrapped with scores: [['score' => float, 'item' => array], ...]
+     */
+    public function vectorSearch(string $collection, string $field, array $queryVector, int $limit = 5, ?string $metric = null): array {}
 
     /**
      * List all active indexes with statistics.

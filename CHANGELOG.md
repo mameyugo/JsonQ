@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-27
+
+### Added
+- **Native Vector Similarity Search**: Implemented fast vector distance/similarity calculations in Rust without external dependencies.
+  - Supported metrics: **Cosine Similarity**, **Euclidean (L2) Distance**, and **Dot Product**.
+  - Custom vector indexing (.vidx) with pre-parsed float vectors, avoiding JSON parsing overhead during queries.
+  - Fallback unindexed vector scan when index is not created.
+  - Dynamic dimension check validations.
+- **PHP API Integration**:
+  - `createVectorIndex(string $collection, string $field, array $options)`: to create and persist vector indexes.
+  - `vectorSearch(string $collection, string $field, array $queryVector, int $limit = 5, ?string $metric = null)`: to query similar vectors with score wrapping.
+  - Updated `listIndexes` to show vector index properties (dimension, metric, and total entries).
+  - Clean IDE autocompletion stubs.
+- **Verification Suites**: Created robust Rust unit tests and a PHP integration test suite (`tests/integration/test_vector_search.php`) testing indexed/unindexed searches, metrics correctness, persistence, and invalid inputs.
+
 ## [0.5.1] - 2026-05-26
 
 ### Added
